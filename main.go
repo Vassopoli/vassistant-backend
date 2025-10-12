@@ -17,8 +17,12 @@ type Message struct {
 func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Printf("request: %+v\n", request)
 	authorizer := request.RequestContext.Authorizer
-	sub, _ := authorizer["sub"].(string)
-	username, _ := authorizer["username"].(string)
+	claims, ok := authorizer["claims"].(map[string]interface{})
+	if !ok {
+    	return events.APIGatewayProxyResponse{StatusCode: 403, Body: "Unauthorized: Invalid claims format"}, nil
+	}
+	sub, _ := claims["sub"].(string)
+	username, _ := claims["cognito:username"].(string)
 
 	message := Message{
 		Sub:      sub,
