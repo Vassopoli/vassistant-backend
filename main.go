@@ -9,15 +9,23 @@ import (
 )
 
 type Message struct {
-	Content string `json:"content"`
+	Sub      string `json:"sub"`
+	Username string `json:"username"`
+	Content  string `json:"content"`
 }
 
 func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	messages := []Message{
-		{Content: "mock"},
+	authorizer := request.RequestContext.Authorizer
+	sub, _ := authorizer["sub"].(string)
+	username, _ := authorizer["username"].(string)
+
+	message := Message{
+		Sub:      sub,
+		Username: username,
+		Content:  "mock",
 	}
 
-	responseBody, err := json.Marshal(messages)
+	responseBody, err := json.Marshal(message)
 	if err != nil {
 		log.Println("Error marshalling json:", err)
 		return events.APIGatewayProxyResponse{
