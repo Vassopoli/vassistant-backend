@@ -15,6 +15,7 @@ type Message struct {
 }
 
 func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	log.Printf("request: %+v\n", request)
 	authorizer := request.RequestContext.Authorizer
 	sub, _ := authorizer["sub"].(string)
 	username, _ := authorizer["username"].(string)
