@@ -168,7 +168,7 @@ func rootHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyR
 	log.Println("Request path:", request.Path)
 	log.Println("Request HTTP method:", request.HTTPMethod)
 
-	if request.Path == "/messages" {
+	if request.Path == "/VassistantBackendProxy/messages" {
 		switch request.HTTPMethod {
 		case "POST":
 			return postMessageHandler(request)
