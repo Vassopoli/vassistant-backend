@@ -37,7 +37,7 @@ func init() {
 	lambdaClient = awslambda.NewFromConfig(cfg)
 }
 
-func invokeProxyHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Printf("request: %+v\n", request)
 
 	targetLambda := os.Getenv("TARGET_LAMBDA_FUNCTION_NAME")
@@ -110,7 +110,7 @@ func invokeProxyHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 	}, nil
 }
 
-func messagesHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func getMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	return events.APIGatewayProxyResponse{
 		StatusCode: 200,
 		Body:       "Hello from the mock handler!",
@@ -119,9 +119,16 @@ func messagesHandler(request events.APIGatewayProxyRequest) (events.APIGatewayPr
 
 func rootHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	if request.Path == "/messages" {
-		return messagesHandler(request)
+		switch request.HTTPMethod {
+		case "POST":
+			return postMessageHandler(request)
+		case "GET":
+			return getMessageHandler(request)
+		default:
+			return events.APIGatewayProxyResponse{StatusCode: 405, Body: "Method Not Allowed"}, nil
+		}
 	}
-	return invokeProxyHandler(request)
+	return events.APIGatewayProxyResponse{StatusCode: 404, Body: "Not Found"}, nil
 }
 
 func main() {
