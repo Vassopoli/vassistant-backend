@@ -129,10 +129,20 @@ func getMessageHandler(request events.APIGatewayProxyRequest) (events.APIGateway
 		Text:     "Mock",
 	}
 
+	// Marshal the message into JSON for the payload
+	payload, err := json.Marshal(message)
+	if err != nil {
+		log.Println("Error marshalling message:", err)
+		return events.APIGatewayProxyResponse{
+			StatusCode: 500,
+			Body:       "Internal server error",
+		}, nil
+	}
+
 	return events.APIGatewayProxyResponse{
 		StatusCode: 200,
 		Headers:    map[string]string{"Content-Type": "application/json"},
-		Body:       string(message),
+		Body:       string(payload),
 	}, nil
 }
 
