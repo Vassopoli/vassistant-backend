@@ -1,16 +1,15 @@
 package main
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/aws/aws-sdk-go-v2/config"
-	awslambda "github.com/aws/aws-sdk-go-v2/service/lambda"
-	"github.com/aws/aws-sdk-go-v2/service/lambda/types"
 )
 
 // ErrorResponse struct for JSON error messages
@@ -50,24 +49,12 @@ type IncomingRequest struct {
 	Text string `json:"text"`
 }
 
-var lambdaClient *awslambda.Client
-
-func init() {
-	// Initialize AWS SDK config
-	cfg, err := config.LoadDefaultConfig(context.TODO())
-	if err != nil {
-		log.Fatalf("unable to load SDK config, %v", err)
-	}
-	// Initialize Lambda client
-	lambdaClient = awslambda.NewFromConfig(cfg)
-}
-
 func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Printf("request: %+v\n", request)
 
-	targetLambda := os.Getenv("TARGET_LAMBDA_FUNCTION_NAME")
-	if targetLambda == "" {
-		log.Println("Error: TARGET_LAMBDA_FUNCTION_NAME environment variable not set.")
+	targetAPI := os.Getenv("TARGET_API_HOSTNAME")
+	if targetAPI == "" {
+		log.Println("Error: TARGET_API_HOSTNAME environment variable not set.")
 		return createErrorResponse(500, "Internal server configuration error")
 	}
 
@@ -103,30 +90,35 @@ func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 		return createErrorResponse(500, "Internal server error")
 	}
 
-	// Prepare the input for the Lambda invocation
-	invokeInput := &awslambda.InvokeInput{
-		FunctionName:   &targetLambda,
-		InvocationType: types.InvocationTypeRequestResponse,
-		Payload:        payload,
-	}
-
-	// Invoke the target Lambda function
-	result, err := lambdaClient.Invoke(context.TODO(), invokeInput)
+	// Create a new HTTP client and request
+	client := &http.Client{}
+	req, err := http.NewRequest("POST", targetAPI, bytes.NewBuffer(payload))
 	if err != nil {
-		log.Println("Error invoking target lambda function:", err)
-		return createErrorResponse(500, "Error invoking target function")
+		log.Println("Error creating HTTP request:", err)
+		return createErrorResponse(500, "Internal server error")
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Send the request
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Println("Error sending HTTP request:", err)
+		return createErrorResponse(500, "Error sending request to target API")
+	}
+	defer resp.Body.Close()
+
+	// Read the response body
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Println("Error reading response body:", err)
+		return createErrorResponse(500, "Internal server error")
 	}
 
-	if result.FunctionError != nil {
-		log.Printf("Error returned by target lambda function: %s", *result.FunctionError)
-		return createErrorResponse(500, "Target function returned an error")
-	}
-
-	// Return the response from the invoked function
+	// Return the response from the target API
 	return events.APIGatewayProxyResponse{
-		StatusCode: int(result.StatusCode),
+		StatusCode: resp.StatusCode,
 		Headers:    map[string]string{"Content-Type": "application/json"},
-		Body:       string(result.Payload),
+		Body:       string(body),
 	}, nil
 }
 
