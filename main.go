@@ -13,6 +13,31 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/lambda/types"
 )
 
+// ErrorResponse struct for JSON error messages
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
+
+// createErrorResponse is a helper function to generate a JSON error response
+func createErrorResponse(statusCode int, message string) (events.APIGatewayProxyResponse, error) {
+	body, err := json.Marshal(ErrorResponse{Error: message})
+	if err != nil {
+		// This should not happen, but if it does, log it and return a generic error
+		log.Printf("Failed to marshal error response: %v", err)
+		return events.APIGatewayProxyResponse{
+			StatusCode: 500,
+			Headers:    map[string]string{"Content-Type": "application/json"},
+			Body:       `{"error":"Internal server error"}`,
+		}, nil
+	}
+
+	return events.APIGatewayProxyResponse{
+		StatusCode: statusCode,
+		Headers:    map[string]string{"Content-Type": "application/json"},
+		Body:       string(body),
+	}, nil
+}
+
 // Message struct for the outgoing payload
 type Message struct {
 	Id       string `json:"id"`
@@ -43,7 +68,7 @@ func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 	targetLambda := os.Getenv("TARGET_LAMBDA_FUNCTION_NAME")
 	if targetLambda == "" {
 		log.Println("Error: TARGET_LAMBDA_FUNCTION_NAME environment variable not set.")
-		return events.APIGatewayProxyResponse{StatusCode: 500, Body: "Internal server configuration error"}, nil
+		return createErrorResponse(500, "Internal server configuration error")
 	}
 
 	// Extract claims from the authorizer
@@ -51,7 +76,7 @@ func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 	claims, ok := authorizer["claims"].(map[string]interface{})
 	if !ok {
 		log.Println("Error: Invalid claims format")
-		return events.APIGatewayProxyResponse{StatusCode: 403, Body: "Unauthorized: Invalid claims format"}, nil
+		return createErrorResponse(403, "Unauthorized: Invalid claims format")
 	}
 	sub, _ := claims["sub"].(string)
 	username, _ := claims["cognito:username"].(string)
@@ -61,10 +86,7 @@ func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 	err := json.Unmarshal([]byte(request.Body), &incomingReq)
 	if err != nil {
 		log.Println("Error unmarshalling request body:", err)
-		return events.APIGatewayProxyResponse{
-			StatusCode: 400,
-			Body:       "Invalid request body format",
-		}, nil
+		return createErrorResponse(400, "Invalid request body format")
 	}
 
 	// Create the outgoing message payload
@@ -78,10 +100,7 @@ func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 	payload, err := json.Marshal(message)
 	if err != nil {
 		log.Println("Error marshalling message:", err)
-		return events.APIGatewayProxyResponse{
-			StatusCode: 500,
-			Body:       "Internal server error",
-		}, nil
+		return createErrorResponse(500, "Internal server error")
 	}
 
 	// Prepare the input for the Lambda invocation
@@ -95,12 +114,12 @@ func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 	result, err := lambdaClient.Invoke(context.TODO(), invokeInput)
 	if err != nil {
 		log.Println("Error invoking target lambda function:", err)
-		return events.APIGatewayProxyResponse{StatusCode: 500, Body: "Error invoking target function"}, nil
+		return createErrorResponse(500, "Error invoking target function")
 	}
 
 	if result.FunctionError != nil {
 		log.Printf("Error returned by target lambda function: %s", *result.FunctionError)
-		return events.APIGatewayProxyResponse{StatusCode: 500, Body: "Target function returned an error"}, nil
+		return createErrorResponse(500, "Target function returned an error")
 	}
 
 	// Return the response from the invoked function
@@ -119,7 +138,7 @@ func getMessageHandler(request events.APIGatewayProxyRequest) (events.APIGateway
 	claims, ok := authorizer["claims"].(map[string]interface{})
 	if !ok {
 		log.Println("Error: Invalid claims format")
-		return events.APIGatewayProxyResponse{StatusCode: 403, Body: "Unauthorized: Invalid claims format"}, nil
+		return createErrorResponse(403, "Unauthorized: Invalid claims format")
 	}
 	sub, _ := claims["sub"].(string)
 	username, _ := claims["cognito:username"].(string)
@@ -135,10 +154,7 @@ func getMessageHandler(request events.APIGatewayProxyRequest) (events.APIGateway
 	payload, err := json.Marshal(message)
 	if err != nil {
 		log.Println("Error marshalling message:", err)
-		return events.APIGatewayProxyResponse{
-			StatusCode: 500,
-			Body:       "Internal server error",
-		}, nil
+		return createErrorResponse(500, "Internal server error")
 	}
 
 	return events.APIGatewayProxyResponse{
@@ -159,10 +175,10 @@ func rootHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyR
 		case "GET":
 			return getMessageHandler(request)
 		default:
-			return events.APIGatewayProxyResponse{StatusCode: 405, Body: "Method Not Allowed"}, nil
+			return createErrorResponse(405, "Method Not Allowed")
 		}
 	}
-	return events.APIGatewayProxyResponse{StatusCode: 404, Body: "Not Found"}, nil
+	return createErrorResponse(404, "Not Found")
 }
 
 func main() {
