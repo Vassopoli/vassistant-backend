@@ -111,9 +111,28 @@ func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 }
 
 func getMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	log.Printf("request: %+v\n", request)
+
+	// Extract claims from the authorizer
+	authorizer := request.RequestContext.Authorizer
+	claims, ok := authorizer["claims"].(map[string]interface{})
+	if !ok {
+		return events.APIGatewayProxyResponse{StatusCode: 403, Body: "Unauthorized: Invalid claims format"}, nil
+	}
+	sub, _ := claims["sub"].(string)
+	username, _ := claims["cognito:username"].(string)
+
+	// Create the outgoing message payload
+	message := Message{
+		Id:       sub,
+		Username: username,
+		Text:     "Mock",
+	}
+
 	return events.APIGatewayProxyResponse{
 		StatusCode: 200,
-		Body:       "Hello from the mock handler!",
+		Headers:    map[string]string{"Content-Type": "application/json"},
+		Body:       string(message),
 	}, nil
 }
 
