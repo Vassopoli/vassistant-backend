@@ -149,6 +149,9 @@ func getMessageHandler(request events.APIGatewayProxyRequest) (events.APIGateway
 }
 
 func rootHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	log.Println("Request path:", request.Path)
+	log.Println("Request HTTP method:", request.HTTPMethod)
+
 	if request.Path == "/messages" {
 		switch request.HTTPMethod {
 		case "POST":
