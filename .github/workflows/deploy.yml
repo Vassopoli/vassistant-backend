@@ -47,7 +47,7 @@ jobs:
           export-env: false
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-          TARGET_LAMBDA: "op://Service Account Vault/VassopoliBot Webhook/hostname"
+          TARGET_LAMBDA: "op://Service Account Vault/VassopoliBot Webhook/lambdaname"
 
       - name: Deploy to Lambda
         id: deploy
