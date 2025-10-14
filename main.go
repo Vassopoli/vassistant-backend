@@ -50,6 +50,7 @@ func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 	authorizer := request.RequestContext.Authorizer
 	claims, ok := authorizer["claims"].(map[string]interface{})
 	if !ok {
+		log.Println("Error: Invalid claims format")
 		return events.APIGatewayProxyResponse{StatusCode: 403, Body: "Unauthorized: Invalid claims format"}, nil
 	}
 	sub, _ := claims["sub"].(string)
@@ -117,6 +118,7 @@ func getMessageHandler(request events.APIGatewayProxyRequest) (events.APIGateway
 	authorizer := request.RequestContext.Authorizer
 	claims, ok := authorizer["claims"].(map[string]interface{})
 	if !ok {
+		log.Println("Error: Invalid claims format")
 		return events.APIGatewayProxyResponse{StatusCode: 403, Body: "Unauthorized: Invalid claims format"}, nil
 	}
 	sub, _ := claims["sub"].(string)
