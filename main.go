@@ -110,7 +110,7 @@ func invokeProxyHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 	}, nil
 }
 
-func mockHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func messagesHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	return events.APIGatewayProxyResponse{
 		StatusCode: 200,
 		Body:       "Hello from the mock handler!",
@@ -118,8 +118,8 @@ func mockHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyR
 }
 
 func rootHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	if request.Path == "/mock" {
-		return mockHandler(request)
+	if request.Path == "/messages" {
+		return messagesHandler(request)
 	}
 	return invokeProxyHandler(request)
 }
