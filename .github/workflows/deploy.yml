@@ -54,6 +54,10 @@ jobs:
         run: |
           aws lambda update-function-code --function-name ${{ secrets.LAMBDA_FUNCTION_NAME }} --zip-file fileb://deployment.zip
 
+      - name: Wait for the function update to complete
+        run: |
+          aws lambda wait function-updated --function-name ${{ secrets.LAMBDA_FUNCTION_NAME }}
+
       - name: Update Lambda Environment Variables
         run: |
           aws lambda update-function-configuration --function-name ${{ secrets.LAMBDA_FUNCTION_NAME }} --environment "Variables={TARGET_LAMBDA_FUNCTION_NAME=${{ steps.target-lambda.outputs.TARGET_LAMBDA }}}"
