@@ -37,7 +37,7 @@ func init() {
 	lambdaClient = awslambda.NewFromConfig(cfg)
 }
 
-func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func invokeProxyHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Printf("request: %+v\n", request)
 
 	targetLambda := os.Getenv("TARGET_LAMBDA_FUNCTION_NAME")
@@ -110,6 +110,20 @@ func handler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyRespo
 	}, nil
 }
 
+func mockHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	return events.APIGatewayProxyResponse{
+		StatusCode: 200,
+		Body:       "Hello from the mock handler!",
+	}, nil
+}
+
+func rootHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	if request.Path == "/mock" {
+		return mockHandler(request)
+	}
+	return invokeProxyHandler(request)
+}
+
 func main() {
-	lambda.Start(handler)
+	lambda.Start(rootHandler)
 }
