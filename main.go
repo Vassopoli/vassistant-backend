@@ -44,6 +44,16 @@ type Message struct {
 	Content  string `json:"content"`
 }
 
+// GetMessage struct for the "get messages" response
+type GetMessage struct {
+	Id        string `json:"id"`
+	UserId    string `json:"userId"`
+	Username  string `json:"username"`
+	Role      string `json:"role"`
+	Content   string `json:"content"`
+	CreatedAt string `json:"createdAt"`
+}
+
 // IncomingRequest struct to parse the request body
 type IncomingRequest struct {
 	Content string `json:"content"`
@@ -135,17 +145,30 @@ func getMessageHandler(request events.APIGatewayProxyRequest) (events.APIGateway
 	sub, _ := claims["sub"].(string)
 	username, _ := claims["cognito:username"].(string)
 
-	// Create the outgoing message payload
-	message := Message{
-		Id:       sub,
-		Username: username,
-		Content:  "Mock",
+	// Create a mocked array of GetMessage objects
+	messages := []GetMessage{
+		{
+			Id:        "mock-id-1",
+			UserId:    sub,
+			Username:  username,
+			Role:      "user",
+			Content:   "Hello, this is a mock message.",
+			CreatedAt: "2023-10-27T10:00:00Z",
+		},
+		{
+			Id:        "mock-id-2",
+			UserId:    "ai-assistant",
+			Username:  "AI Assistant",
+			Role:      "assistant",
+			Content:   "Hi there! This is a mock response.",
+			CreatedAt: "2023-10-27T10:00:05Z",
+		},
 	}
 
-	// Marshal the message into JSON for the payload
-	payload, err := json.Marshal(message)
+	// Marshal the messages into JSON for the payload
+	payload, err := json.Marshal(messages)
 	if err != nil {
-		log.Println("Error marshalling message:", err)
+		log.Println("Error marshalling messages:", err)
 		return createErrorResponse(500, "Internal server error")
 	}
 
