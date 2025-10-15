@@ -102,7 +102,7 @@ func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 
 	// Create a new HTTP client and request
 	client := &http.Client{}
-	req, err := http.NewRequest("POST", targetAPI, bytes.NewBuffer(payload))
+	req, err := http.NewRequest("POST", targetAPI+"/telegram-bot/text-command", bytes.NewBuffer(payload))
 	if err != nil {
 		log.Println("Error creating HTTP request:", err)
 		return createErrorResponse(500, "Internal server error")
