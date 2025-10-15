@@ -124,6 +124,9 @@ func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 		return createErrorResponse(500, "Internal server error")
 	}
 
+	// Log the response from the target API
+	log.Printf("Target API response: StatusCode=%d, Body=%s", resp.StatusCode, string(body))
+
 	// Return the response from the target API
 	return events.APIGatewayProxyResponse{
 		StatusCode: resp.StatusCode,
