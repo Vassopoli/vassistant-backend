@@ -41,12 +41,12 @@ func createErrorResponse(statusCode int, message string) (events.APIGatewayProxy
 type Message struct {
 	Id       string `json:"id"`
 	Username string `json:"username"`
-	Text     string `json:"text"`
+	Content  string `json:"content"`
 }
 
 // IncomingRequest struct to parse the request body
 type IncomingRequest struct {
-	Text string `json:"text"`
+	Content string `json:"content"`
 }
 
 func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -80,7 +80,7 @@ func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 	message := Message{
 		Id:       sub,
 		Username: username,
-		Text:     incomingReq.Text,
+		Content:  incomingReq.Content,
 	}
 
 	// Marshal the message into JSON for the payload
@@ -139,7 +139,7 @@ func getMessageHandler(request events.APIGatewayProxyRequest) (events.APIGateway
 	message := Message{
 		Id:       sub,
 		Username: username,
-		Text:     "Mock",
+		Content:  "Mock",
 	}
 
 	// Marshal the message into JSON for the payload
