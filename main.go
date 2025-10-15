@@ -8,9 +8,29 @@ import (
 	"net/http"
 	"os"
 
+	"context"
+
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
+
+var dynamoDbClient *dynamodb.Client
+
+func init() {
+	// Load the Shared AWS Configuration (~/.aws/config)
+	cfg, err := config.LoadDefaultConfig(context.TODO())
+	if err != nil {
+		log.Fatalf("unable to load SDK config, %v", err)
+	}
+
+	// Create DynamoDB client
+	dynamoDbClient = dynamodb.NewFromConfig(cfg)
+}
 
 // ErrorResponse struct for JSON error messages
 type ErrorResponse struct {
@@ -135,6 +155,34 @@ func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 	}, nil
 }
 
+// queryMessagesByUserID queries the DynamoDB table for messages by userId
+func queryMessagesByUserID(userID string) ([]GetMessage, error) {
+	// Build the query input
+	queryInput := &dynamodb.QueryInput{
+		TableName:              aws.String("chat"),
+		KeyConditionExpression: aws.String("userId = :userId"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":userId": &types.AttributeValueMemberS{Value: userID},
+		},
+		ScanIndexForward: aws.Bool(true), // Sort by createdAt ascending
+	}
+
+	// Make the DynamoDB Query API call
+	result, err := dynamoDbClient.Query(context.TODO(), queryInput)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal the Items into a slice of GetMessage structs
+	var messages []GetMessage
+	err = attributevalue.UnmarshalListOfMaps(result.Items, &messages)
+	if err != nil {
+		return nil, err
+	}
+
+	return messages, nil
+}
+
 func getMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Printf("request: %+v\n", request)
 
@@ -147,25 +195,13 @@ func getMessageHandler(request events.APIGatewayProxyRequest) (events.APIGateway
 	}
 	sub, _ := claims["sub"].(string)
 	username, _ := claims["cognito:username"].(string)
+	log.Printf("request from user: %s, sub: %s\n", username, sub)
 
-	// Create a mocked array of GetMessage objects
-	messages := []GetMessage{
-		{
-			Id:        "mock-id-1",
-			UserId:    sub,
-			Username:  username,
-			Role:      "user",
-			Content:   "Hello, this is a mock message.",
-			CreatedAt: "2023-10-27T10:00:00Z",
-		},
-		{
-			Id:        "mock-id-2",
-			UserId:    "ai-assistant",
-			Username:  "AI Assistant",
-			Role:      "assistant",
-			Content:   "Hi there! This is a mock response.",
-			CreatedAt: "2023-10-27T10:00:05Z",
-		},
+	// Query messages from DynamoDB
+	messages, err := queryMessagesByUserID(sub)
+	if err != nil {
+		log.Printf("Error querying DynamoDB: %v", err)
+		return createErrorResponse(500, "Internal server error")
 	}
 
 	// Marshal the messages into JSON for the payload
