@@ -106,7 +106,7 @@ func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 		Username:  username,
 		Role:      "user",
 		Content:   incomingReq.Content,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
 
 	// Marshal the message into an attribute value map
