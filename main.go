@@ -129,8 +129,18 @@ func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 		return createErrorResponse(500, "Failed to save message")
 	}
 
-	// Marshal the new message into JSON for the response body
-	responseBody, err := json.Marshal(newMessage)
+	// Save a mock assistant message
+	assistantMessage, err := saveAssistantMessage(sub)
+	if err != nil {
+		log.Printf("Error saving assistant message to DynamoDB: %v", err)
+		return createErrorResponse(500, "Failed to save assistant message")
+	}
+
+	// Create a response that includes both the user's message and the assistant's message
+	responseMessages := []GetMessage{newMessage, assistantMessage}
+
+	// Marshal the messages into JSON for the response body
+	responseBody, err := json.Marshal(responseMessages)
 	if err != nil {
 		log.Printf("Error marshalling response body: %v", err)
 		return createErrorResponse(500, "Internal server error")
@@ -142,6 +152,35 @@ func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 		Headers:    map[string]string{"Content-Type": "application/json"},
 		Body:       string(responseBody),
 	}, nil
+}
+
+func saveAssistantMessage(sub string) (GetMessage, error) {
+	assistantMessage := GetMessage{
+		Id:        uuid.New().String(),
+		UserId:    sub,
+		Username:  "ai-assistant",
+		Role:      "assistant",
+		Content:   "This is a mock response from the assistant.",
+		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+	}
+
+	av, err := attributevalue.MarshalMap(assistantMessage)
+	if err != nil {
+		log.Printf("Error marshalling assistant message to AttributeValue: %v", err)
+		return GetMessage{}, err
+	}
+
+	putItemInput := &dynamodb.PutItemInput{
+		TableName: aws.String("chat"),
+		Item:      av,
+	}
+
+	_, err = dynamoDbClient.PutItem(context.TODO(), putItemInput)
+	if err != nil {
+		log.Printf("Error saving assistant message to DynamoDB: %v", err)
+		return GetMessage{}, err
+	}
+	return assistantMessage, nil
 }
 
 // queryMessagesByUserID queries the DynamoDB table for messages by userId
