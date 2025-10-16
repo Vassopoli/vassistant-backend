@@ -1,14 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
-	"io/ioutil"
 	"log"
-	"net/http"
-	"os"
+	"time"
 
 	"context"
+
+	"github.com/google/uuid"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -82,12 +81,6 @@ type IncomingRequest struct {
 func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Printf("request: %+v\n", request)
 
-	targetAPI := os.Getenv("TARGET_API_HOSTNAME")
-	if targetAPI == "" {
-		log.Println("Error: TARGET_API_HOSTNAME environment variable not set.")
-		return createErrorResponse(500, "Internal server configuration error")
-	}
-
 	// Extract claims from the authorizer
 	authorizer := request.RequestContext.Authorizer
 	claims, ok := authorizer["claims"].(map[string]interface{})
@@ -106,52 +99,48 @@ func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 		return createErrorResponse(400, "Invalid request body format")
 	}
 
-	// Create the outgoing message payload
-	message := Message{
-		Id:       sub,
-		Username: username,
-		Content:  incomingReq.Content,
+	// Create the new message object
+	newMessage := GetMessage{
+		Id:        uuid.New().String(),
+		UserId:    sub,
+		Username:  username,
+		Role:      "user",
+		Content:   incomingReq.Content,
+		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	// Marshal the message into JSON for the payload
-	payload, err := json.Marshal(message)
+	// Marshal the message into an attribute value map
+	av, err := attributevalue.MarshalMap(newMessage)
 	if err != nil {
-		log.Println("Error marshalling message:", err)
+		log.Printf("Error marshalling message to AttributeValue: %v", err)
 		return createErrorResponse(500, "Internal server error")
 	}
 
-	// Create a new HTTP client and request
-	client := &http.Client{}
-	req, err := http.NewRequest("POST", targetAPI+"/telegram-bot/text-command", bytes.NewBuffer(payload))
-	if err != nil {
-		log.Println("Error creating HTTP request:", err)
-		return createErrorResponse(500, "Internal server error")
+	// Create the PutItem input
+	putItemInput := &dynamodb.PutItemInput{
+		TableName: aws.String("chat"),
+		Item:      av,
 	}
-	req.Header.Set("Content-Type", "application/json")
 
-	// Send the request
-	resp, err := client.Do(req)
+	// Save the message to DynamoDB
+	_, err = dynamoDbClient.PutItem(context.TODO(), putItemInput)
 	if err != nil {
-		log.Println("Error sending HTTP request:", err)
-		return createErrorResponse(500, "Error sending request to target API")
+		log.Printf("Error saving message to DynamoDB: %v", err)
+		return createErrorResponse(500, "Failed to save message")
 	}
-	defer resp.Body.Close()
 
-	// Read the response body
-	body, err := ioutil.ReadAll(resp.Body)
+	// Marshal the new message into JSON for the response body
+	responseBody, err := json.Marshal(newMessage)
 	if err != nil {
-		log.Println("Error reading response body:", err)
+		log.Printf("Error marshalling response body: %v", err)
 		return createErrorResponse(500, "Internal server error")
 	}
 
-	// Log the response from the target API
-	log.Printf("Target API response: StatusCode=%d, Body=%s", resp.StatusCode, string(body))
-
-	// Return the response from the target API
+	// Return a 201 Created response
 	return events.APIGatewayProxyResponse{
-		StatusCode: resp.StatusCode,
+		StatusCode: 201,
 		Headers:    map[string]string{"Content-Type": "application/json"},
-		Body:       string(body),
+		Body:       string(responseBody),
 	}, nil
 }
 
