@@ -65,12 +65,12 @@ type Message struct {
 
 // GetMessage struct for the "get messages" response
 type GetMessage struct {
-	Id        string `json:"id"`
-	UserId    string `json:"userId"`
-	Username  string `json:"username"`
-	Role      string `json:"role"`
-	Content   string `json:"content"`
-	CreatedAt string `json:"createdAt"`
+	Id        string `json:"id" dynamodbav:"id"`
+	UserId    string `json:"userId" dynamodbav:"userId"`
+	Username  string `json:"username" dynamodbav:"username"`
+	Role      string `json:"role" dynamodbav:"role"`
+	Content   string `json:"content" dynamodbav:"content"`
+	CreatedAt string `json:"createdAt" dynamodbav:"createdAt"`
 }
 
 // IncomingRequest struct to parse the request body
