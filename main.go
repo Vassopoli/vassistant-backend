@@ -388,18 +388,18 @@ func rootHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyR
 
 	if strings.HasPrefix(request.Path, "/VassistantBackendProxy/financial/groups") {
 		parts := strings.Split(request.Path, "/")
-		if len(parts) == 3 && parts[2] == "groups" {
+		if len(parts) == 4 && parts[3] == "groups" {
 			// Path is /financial/groups
 			if request.HTTPMethod == "GET" {
 				return getGroupsHandler(request)
 			} else {
 				return createErrorResponse(405, "Method Not Allowed")
 			}
-		} else if len(parts) == 4 && parts[2] == "groups" {
+		} else if len(parts) == 5 && parts[3] == "groups" {
 			// Path is /financial/groups/{groupId}
 			if request.HTTPMethod == "GET" {
 				// The groupId is the 4th part of the path
-				request.PathParameters = map[string]string{"groupId": parts[3]}
+				request.PathParameters = map[string]string{"groupId": parts[4]}
 				return getGroupExpensesHandler(request)
 			} else {
 				return createErrorResponse(405, "Method Not Allowed")
