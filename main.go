@@ -272,6 +272,8 @@ func getGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 		return createErrorResponse(500, "Internal server error")
 	}
 
+	log.Printf("Successfully retrieved %d expenses for group %s", len(expenses), groupId)
+
 	// Marshal the expenses into JSON for the payload
 	payload, err := json.Marshal(expenses)
 	if err != nil {
@@ -321,6 +323,8 @@ func getGroupsHandler(request events.APIGatewayProxyRequest) (events.APIGatewayP
 		log.Printf("Error unmarshalling group members: %v", err)
 		return createErrorResponse(500, "Internal server error")
 	}
+
+	log.Printf("Successfully retrieved %d groups for user %s", len(groupMembers), sub)
 
 	// Marshal the group members into JSON for the payload
 	payload, err := json.Marshal(groupMembers)
