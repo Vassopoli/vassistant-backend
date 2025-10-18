@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"strings"
 	"time"
 
 	"context"
@@ -76,6 +77,33 @@ type GetMessage struct {
 // IncomingRequest struct to parse the request body
 type IncomingRequest struct {
 	Content string `json:"content"`
+}
+
+// Participant struct for financial expense participants
+type Participant struct {
+	UserID string      `json:"userId" dynamodbav:"userId"`
+	Share  json.Number `json:"share" dynamodbav:"share"`
+}
+
+// FinancialExpense struct for the "get financial" response
+type FinancialExpense struct {
+	ExpenseID    string        `json:"expenseId" dynamodbav:"expenseId"`
+	GroupID      string        `json:"groupId" dynamodbav:"groupId"`
+	Description  string        `json:"description" dynamodbav:"description"`
+	Category     string        `json:"category" dynamodbav:"category"`
+	Amount       json.Number   `json:"amount" dynamodbav:"amount"`
+	DateTime     string        `json:"dateTime" dynamodbav:"dateTime"`
+	PaidBy       string        `json:"paidBy" dynamodbav:"paidBy"`
+	ImageURL     string        `json:"imageUrl" dynamodbav:"imageUrl"`
+	SplitType    string        `json:"splitType" dynamodbav:"splitType"`
+	Participants []Participant `json:"participants" dynamodbav:"participants"`
+	Settled      bool          `json:"settled" dynamodbav:"settled"`
+}
+
+// GroupMember struct for the splitter-group-members table
+type GroupMember struct {
+	UserID  string `json:"userId" dynamodbav:"userId"`
+	GroupID string `json:"groupId" dynamodbav:"groupId"`
 }
 
 func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -211,6 +239,103 @@ func queryMessagesByUserID(userID string) ([]GetMessage, error) {
 	return messages, nil
 }
 
+func getGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	log.Printf("request: %+v\n", request)
+
+	// Extract groupId from path parameters
+	groupId, ok := request.PathParameters["groupId"]
+	if !ok || groupId == "" {
+		return createErrorResponse(400, "Group ID is missing")
+	}
+
+	// Build the query input
+	queryInput := &dynamodb.QueryInput{
+		TableName:              aws.String("splitter-expenses"),
+		KeyConditionExpression: aws.String("groupId = :groupId"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":groupId": &types.AttributeValueMemberS{Value: groupId},
+		},
+	}
+
+	// Make the DynamoDB Query API call
+	result, err := dynamoDbClient.Query(context.TODO(), queryInput)
+	if err != nil {
+		log.Printf("Error querying DynamoDB: %v", err)
+		return createErrorResponse(500, "Internal server error")
+	}
+
+	// Unmarshal the Items into a slice of FinancialExpense structs
+	var expenses []FinancialExpense
+	err = attributevalue.UnmarshalListOfMaps(result.Items, &expenses)
+	if err != nil {
+		log.Printf("Error unmarshalling expenses: %v", err)
+		return createErrorResponse(500, "Internal server error")
+	}
+
+	// Marshal the expenses into JSON for the payload
+	payload, err := json.Marshal(expenses)
+	if err != nil {
+		log.Println("Error marshalling expenses:", err)
+		return createErrorResponse(500, "Internal server error")
+	}
+
+	return events.APIGatewayProxyResponse{
+		StatusCode: 200,
+		Headers:    map[string]string{"Content-Type": "application/json"},
+		Body:       string(payload),
+	}, nil
+}
+
+func getGroupsHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	log.Printf("request: %+v\n", request)
+
+	// Extract claims from the authorizer
+	authorizer := request.RequestContext.Authorizer
+	claims, ok := authorizer["claims"].(map[string]interface{})
+	if !ok {
+		log.Println("Error: Invalid claims format")
+		return createErrorResponse(403, "Unauthorized: Invalid claims format")
+	}
+	sub, _ := claims["sub"].(string)
+
+	// Build the query input
+	queryInput := &dynamodb.QueryInput{
+		TableName:              aws.String("splitter-group-members"),
+		KeyConditionExpression: aws.String("userId = :userId"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":userId": &types.AttributeValueMemberS{Value: sub},
+		},
+	}
+
+	// Make the DynamoDB Query API call
+	result, err := dynamoDbClient.Query(context.TODO(), queryInput)
+	if err != nil {
+		log.Printf("Error querying DynamoDB: %v", err)
+		return createErrorResponse(500, "Internal server error")
+	}
+
+	// Unmarshal the Items into a slice of GroupMember structs
+	var groupMembers []GroupMember
+	err = attributevalue.UnmarshalListOfMaps(result.Items, &groupMembers)
+	if err != nil {
+		log.Printf("Error unmarshalling group members: %v", err)
+		return createErrorResponse(500, "Internal server error")
+	}
+
+	// Marshal the group members into JSON for the payload
+	payload, err := json.Marshal(groupMembers)
+	if err != nil {
+		log.Println("Error marshalling group members:", err)
+		return createErrorResponse(500, "Internal server error")
+	}
+
+	return events.APIGatewayProxyResponse{
+		StatusCode: 200,
+		Headers:    map[string]string{"Content-Type": "application/json"},
+		Body:       string(payload),
+	}, nil
+}
+
 func getMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Printf("request: %+v\n", request)
 
@@ -260,6 +385,28 @@ func rootHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyR
 			return createErrorResponse(405, "Method Not Allowed")
 		}
 	}
+
+	if strings.HasPrefix(request.Path, "/financial/groups") {
+		parts := strings.Split(request.Path, "/")
+		if len(parts) == 3 && parts[2] == "groups" {
+			// Path is /financial/groups
+			if request.HTTPMethod == "GET" {
+				return getGroupsHandler(request)
+			} else {
+				return createErrorResponse(405, "Method Not Allowed")
+			}
+		} else if len(parts) == 4 && parts[2] == "groups" {
+			// Path is /financial/groups/{groupId}
+			if request.HTTPMethod == "GET" {
+				// The groupId is the 4th part of the path
+				request.PathParameters = map[string]string{"groupId": parts[3]}
+				return getGroupExpensesHandler(request)
+			} else {
+				return createErrorResponse(405, "Method Not Allowed")
+			}
+		}
+	}
+
 	return createErrorResponse(404, "Not Found")
 }
 
