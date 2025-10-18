@@ -102,9 +102,11 @@ type FinancialExpense struct {
 
 // GroupMember struct for the splitter-group-members table
 type GroupMember struct {
-	UserID  string `json:"userId" dynamodbav:"userId"`
-	GroupID string `json:"groupId" dynamodbav:"groupId"`
+	UserID    string `json:"userId" dynamodbav:"userId"`
+	GroupID   string `json:"groupId" dynamodbav:"groupId"`
+	GroupName string `json:"groupName" dynamodbav:"groupName"`
 }
+
 
 func postMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Printf("request: %+v\n", request)
@@ -307,6 +309,7 @@ func getGroupsHandler(request events.APIGatewayProxyRequest) (events.APIGatewayP
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":userId": &types.AttributeValueMemberS{Value: sub},
 		},
+		ProjectionExpression: aws.String("userId, groupId, groupName"),
 	}
 
 	// Make the DynamoDB Query API call
