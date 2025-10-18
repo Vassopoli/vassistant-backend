@@ -386,7 +386,7 @@ func rootHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyR
 		}
 	}
 
-	if strings.HasPrefix(request.Path, "/financial/groups") {
+	if strings.HasPrefix(request.Path, "/VassistantBackendProxy/financial/groups") {
 		parts := strings.Split(request.Path, "/")
 		if len(parts) == 3 && parts[2] == "groups" {
 			// Path is /financial/groups
