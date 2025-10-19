@@ -16,7 +16,12 @@ import (
 // MockDynamoDBClient is a mock implementation of the DynamoDBAPI interface
 type MockDynamoDBClient struct {
 	common.DynamoDBAPI
-	QueryFunc func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
+	QueryFunc        func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
+	BatchGetItemFunc func(ctx context.Context, params *dynamodb.BatchGetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.BatchGetItemOutput, error)
+}
+
+func (m *MockDynamoDBClient) BatchGetItem(ctx context.Context, params *dynamodb.BatchGetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.BatchGetItemOutput, error) {
+	return m.BatchGetItemFunc(ctx, params, optFns...)
 }
 
 func (m *MockDynamoDBClient) PutItem(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
@@ -79,4 +84,80 @@ func TestGetGroupsHandler(t *testing.T) {
 	assert.Equal(t, "test-user-id", groupMember.UserID)
 	assert.Equal(t, "test-group-id", groupMember.GroupID)
 	assert.Equal(t, "Test Group", groupMember.GroupName)
+}
+
+func TestGetGroupExpensesHandler(t *testing.T) {
+	// Set up the mock DynamoDB client
+	mockClient := &MockDynamoDBClient{
+		QueryFunc: func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+			// Create a sample expense
+			expense := FinancialExpense{
+				ExpenseID:   "test-expense-id",
+				GroupID:     "test-group-id",
+				Description: "Test Expense",
+				Amount:      "100",
+				PaidBy:      "user-1",
+				Participants: []Participant{
+					{UserID: "user-1", Share: "50"},
+					{UserID: "user-2", Share: "50"},
+				},
+			}
+			// Marshal the expense into a DynamoDB attribute value map
+			av, err := attributevalue.MarshalMap(expense)
+			if err != nil {
+				return nil, err
+			}
+			return &dynamodb.QueryOutput{
+				Items: []map[string]types.AttributeValue{av},
+				Count: 1,
+			}, nil
+		},
+		BatchGetItemFunc: func(ctx context.Context, params *dynamodb.BatchGetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.BatchGetItemOutput, error) {
+			// Create sample user data
+			user1 := map[string]types.AttributeValue{
+				"userId":       &types.AttributeValueMemberS{Value: "user-1"},
+				"showableName": &types.AttributeValueMemberS{Value: "User One"},
+			}
+			user2 := map[string]types.AttributeValue{
+				"userId":       &types.AttributeValueMemberS{Value: "user-2"},
+				"showableName": &types.AttributeValueMemberS{Value: "User Two"},
+			}
+			return &dynamodb.BatchGetItemOutput{
+				Responses: map[string][]map[string]types.AttributeValue{
+					"vassistant-users": {user1, user2},
+				},
+			}, nil
+		},
+	}
+	DynamoDbClient = mockClient
+
+	// Create a sample request
+	request := events.APIGatewayProxyRequest{
+		PathParameters: map[string]string{
+			"groupId": "test-group-id",
+		},
+	}
+
+	// Call the handler
+	response, err := GetGroupExpensesHandler(request)
+	assert.NoError(t, err)
+
+	// Check the response
+	assert.Equal(t, http.StatusOK, response.StatusCode)
+
+	var expenses []FinancialExpense
+	err = json.Unmarshal([]byte(response.Body), &expenses)
+	assert.NoError(t, err)
+	assert.Len(t, expenses, 1)
+
+	// Verify the expense and participants
+	expense := expenses[0]
+	assert.Equal(t, "test-expense-id", expense.ExpenseID)
+	assert.Equal(t, "user-1", expense.PaidBy)
+	assert.Equal(t, "User One", expense.PaidByUser.ShowableName)
+	assert.Len(t, expense.Participants, 2)
+	assert.Equal(t, "user-1", expense.Participants[0].UserID)
+	assert.Equal(t, "User One", expense.Participants[0].User.ShowableName)
+	assert.Equal(t, "user-2", expense.Participants[1].UserID)
+	assert.Equal(t, "User Two", expense.Participants[1].User.ShowableName)
 }
