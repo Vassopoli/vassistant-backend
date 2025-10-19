@@ -1,16 +1,17 @@
 package financial
 
 import (
+	"context"
 	"encoding/json"
 	"log"
-
-	"context"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/google/uuid"
 )
 
 // Participant struct for financial expense participants
@@ -112,6 +113,64 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 
 	return events.APIGatewayProxyResponse{
 		StatusCode: 200,
+		Headers:    map[string]string{"Content-Type": "application/json"},
+		Body:       string(payload),
+	}, nil
+}
+
+func PostGroupExpenseHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	log.Printf("request: %+v\n", request)
+
+	// Extract groupId from path parameters
+	groupId, ok := request.PathParameters["groupId"]
+	if !ok || groupId == "" {
+		return createErrorResponse(400, "Group ID is missing")
+	}
+
+	// Parse the request body into a FinancialExpense struct
+	var expense FinancialExpense
+	err := json.Unmarshal([]byte(request.Body), &expense)
+	if err != nil {
+		log.Printf("Error unmarshalling request body: %v", err)
+		return createErrorResponse(400, "Invalid request body")
+	}
+
+	// Generate a new UUID for the expense
+	expense.ExpenseID = uuid.New().String()
+	expense.GroupID = groupId
+	expense.DateTime = time.Now().Format(time.RFC3339)
+
+	// Marshal the expense into a DynamoDB attribute value map
+	av, err := attributevalue.MarshalMap(expense)
+	if err != nil {
+		log.Printf("Error marshalling expense: %v", err)
+		return createErrorResponse(500, "Internal server error")
+	}
+
+	// Build the PutItem input
+	putInput := &dynamodb.PutItemInput{
+		TableName: aws.String("splitter-expenses"),
+		Item:      av,
+	}
+
+	// Make the DynamoDB PutItem API call
+	_, err = DynamoDbClient.PutItem(context.TODO(), putInput)
+	if err != nil {
+		log.Printf("Error putting item into DynamoDB: %v", err)
+		return createErrorResponse(500, "Internal server error")
+	}
+
+	log.Printf("Successfully created expense %s for group %s", expense.ExpenseID, expense.GroupID)
+
+	// Marshal the expense into JSON for the payload
+	payload, err := json.Marshal(expense)
+	if err != nil {
+		log.Println("Error marshalling expense:", err)
+		return createErrorResponse(500, "Internal server error")
+	}
+
+	return events.APIGatewayProxyResponse{
+		StatusCode: 201,
 		Headers:    map[string]string{"Content-Type": "application/json"},
 		Body:       string(payload),
 	}, nil
