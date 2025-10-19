@@ -42,6 +42,7 @@ type FinancialExpense struct {
 	SplitType    string        `json:"splitType" dynamodbav:"splitType"`
 	Participants []Participant `json:"participants" dynamodbav:"participants"`
 	Settled      bool          `json:"settled" dynamodbav:"settled"`
+	PaidByUser   User          `json:"paidByUser" dynamodbav:"-"`
 }
 
 // GroupMember struct for the splitter-group-members table
@@ -116,6 +117,7 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 	// Collect all unique user IDs from all participants
 	userIds := make(map[string]struct{})
 	for _, expense := range expenses {
+		userIds[expense.PaidBy] = struct{}{}
 		for _, participant := range expense.Participants {
 			userIds[participant.UserID] = struct{}{}
 		}
@@ -167,6 +169,9 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 
 		// Populate the user details in the expenses
 		for i, expense := range expenses {
+			if user, ok := userMap[expense.PaidBy]; ok {
+				expenses[i].PaidByUser = user
+			}
 			for j, participant := range expense.Participants {
 				if user, ok := userMap[participant.UserID]; ok {
 					expenses[i].Participants[j].User = user
