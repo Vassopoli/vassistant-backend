@@ -78,11 +78,13 @@ func rootHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyR
 			}
 		} else if len(parts) == 6 && parts[3] == "groups" && parts[5] == "expenses" {
 			// Path is /financial/groups/{groupId}/expenses
-			if request.HTTPMethod == "GET" {
-				// The groupId is the 4th part of the path
-				request.PathParameters = map[string]string{"groupId": parts[4]}
+			request.PathParameters = map[string]string{"groupId": parts[4]}
+			switch request.HTTPMethod {
+			case "GET":
 				return financial.GetGroupExpensesHandler(request)
-			} else {
+			case "POST":
+				return financial.PostGroupExpenseHandler(request)
+			default:
 				return createErrorResponse(405, "Method Not Allowed")
 			}
 		}
