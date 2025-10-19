@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"time"
+	"vassistant-backend/common"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -36,7 +37,7 @@ type IncomingRequest struct {
 	Content string `json:"content"`
 }
 
-var DynamoDbClient *dynamodb.Client
+var DynamoDbClient common.DynamoDBAPI
 
 // ErrorResponse struct for JSON error messages
 type ErrorResponse struct {
