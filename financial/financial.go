@@ -19,6 +19,14 @@ import (
 type Participant struct {
 	UserID string      `json:"userId" dynamodbav:"userId"`
 	Share  json.Number `json:"share" dynamodbav:"share"`
+	User   `dynamodbav:"-"`
+}
+
+// User struct for the vassistant-users table
+type User struct {
+	Username     string `json:"username" dynamodbav:"username"`
+	ShowableName string `json:"showableName" dynamodbav:"showableName"`
+	Role         string `json:"role" dynamodbav:"role"`
 }
 
 // FinancialExpense struct for the "get financial" response
@@ -104,6 +112,68 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 	}
 
 	log.Printf("Successfully retrieved %d expenses for group %s", len(expenses), groupId)
+
+	// Collect all unique user IDs from all participants
+	userIds := make(map[string]struct{})
+	for _, expense := range expenses {
+		for _, participant := range expense.Participants {
+			userIds[participant.UserID] = struct{}{}
+		}
+	}
+
+	// Prepare keys for BatchGetItem
+	keys := make([]map[string]types.AttributeValue, 0, len(userIds))
+	for userId := range userIds {
+		keys = append(keys, map[string]types.AttributeValue{
+			"userId": &types.AttributeValueMemberS{Value: userId},
+		})
+	}
+
+	// Fetch all user details in a single BatchGetItem call
+	if len(keys) > 0 {
+		batchGetItemInput := &dynamodb.BatchGetItemInput{
+			RequestItems: map[string]types.KeysAndAttributes{
+				"vassistant-users": {
+					Keys: keys,
+				},
+			},
+		}
+
+		userResult, err := DynamoDbClient.BatchGetItem(context.TODO(), batchGetItemInput)
+		if err != nil {
+			log.Printf("Error getting user details from DynamoDB: %v", err)
+			return createErrorResponse(500, "Internal server error")
+		}
+
+		// Create a map of userId to User for easy lookup
+		userMap := make(map[string]User)
+		userItems := userResult.Responses["vassistant-users"]
+
+		for _, item := range userItems {
+			var user User
+			err = attributevalue.UnmarshalMap(item, &user)
+			if err != nil {
+				log.Printf("Error unmarshalling user: %v", err)
+				return createErrorResponse(500, "Internal server error")
+			}
+			var userId string
+			err = attributevalue.Unmarshal(item["userId"], &userId)
+			if err != nil {
+				log.Printf("Error unmarshalling userId: %v", err)
+				return createErrorResponse(500, "Internal server error")
+			}
+			userMap[userId] = user
+		}
+
+		// Populate the user details in the expenses
+		for i, expense := range expenses {
+			for j, participant := range expense.Participants {
+				if user, ok := userMap[participant.UserID]; ok {
+					expenses[i].Participants[j].User = user
+				}
+			}
+		}
+	}
 
 	// Marshal the expenses into JSON for the payload
 	payload, err := json.Marshal(expenses)
