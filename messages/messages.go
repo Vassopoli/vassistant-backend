@@ -39,31 +39,6 @@ type IncomingRequest struct {
 
 var DynamoDbClient common.DynamoDBAPI
 
-// ErrorResponse struct for JSON error messages
-type ErrorResponse struct {
-	Error string `json:"error"`
-}
-
-// createErrorResponse is a helper function to generate a JSON error response
-func createErrorResponse(statusCode int, message string) (events.APIGatewayProxyResponse, error) {
-	body, err := json.Marshal(ErrorResponse{Error: message})
-	if err != nil {
-		// This should not happen, but if it does, log it and return a generic error
-		log.Printf("Failed to marshal error response: %v", err)
-		return events.APIGatewayProxyResponse{
-			StatusCode: 500,
-			Headers:    map[string]string{"Content-Type": "application/json"},
-			Body:       `{"error":"Internal server error"}`,
-		}, nil
-	}
-
-	return events.APIGatewayProxyResponse{
-		StatusCode: statusCode,
-		Headers:    map[string]string{"Content-Type": "application/json"},
-		Body:       string(body),
-	}, nil
-}
-
 func PostMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Printf("request: %+v\n", request)
 
@@ -72,7 +47,7 @@ func PostMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 	claims, ok := authorizer["claims"].(map[string]interface{})
 	if !ok {
 		log.Println("Error: Invalid claims format")
-		return createErrorResponse(403, "Unauthorized: Invalid claims format")
+		return common.CreateErrorResponse(403, "Unauthorized: Invalid claims format")
 	}
 	sub, _ := claims["sub"].(string)
 	username, _ := claims["cognito:username"].(string)
@@ -82,7 +57,7 @@ func PostMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 	err := json.Unmarshal([]byte(request.Body), &incomingReq)
 	if err != nil {
 		log.Println("Error unmarshalling request body:", err)
-		return createErrorResponse(400, "Invalid request body format")
+		return common.CreateErrorResponse(400, "Invalid request body format")
 	}
 
 	// Create the new message object
@@ -99,7 +74,7 @@ func PostMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 	av, err := attributevalue.MarshalMap(newMessage)
 	if err != nil {
 		log.Printf("Error marshalling message to AttributeValue: %v", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	// Create the PutItem input
@@ -112,14 +87,14 @@ func PostMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 	_, err = DynamoDbClient.PutItem(context.TODO(), putItemInput)
 	if err != nil {
 		log.Printf("Error saving message to DynamoDB: %v", err)
-		return createErrorResponse(500, "Failed to save message")
+		return common.CreateErrorResponse(500, "Failed to save message")
 	}
 
 	// Save a mock assistant message
 	assistantMessage, err := saveAssistantMessage(sub)
 	if err != nil {
 		log.Printf("Error saving assistant message to DynamoDB: %v", err)
-		return createErrorResponse(500, "Failed to save assistant message")
+		return common.CreateErrorResponse(500, "Failed to save assistant message")
 	}
 
 	// Create a response that includes both the user's message and the assistant's message
@@ -129,7 +104,7 @@ func PostMessageHandler(request events.APIGatewayProxyRequest) (events.APIGatewa
 	responseBody, err := json.Marshal(responseMessages)
 	if err != nil {
 		log.Printf("Error marshalling response body: %v", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	// Return a 201 Created response
@@ -205,7 +180,7 @@ func GetMessageHandler(request events.APIGatewayProxyRequest) (events.APIGateway
 	claims, ok := authorizer["claims"].(map[string]interface{})
 	if !ok {
 		log.Println("Error: Invalid claims format")
-		return createErrorResponse(403, "Unauthorized: Invalid claims format")
+		return common.CreateErrorResponse(403, "Unauthorized: Invalid claims format")
 	}
 	sub, _ := claims["sub"].(string)
 	username, _ := claims["cognito:username"].(string)
@@ -215,14 +190,14 @@ func GetMessageHandler(request events.APIGatewayProxyRequest) (events.APIGateway
 	messages, err := queryMessagesByUserID(sub)
 	if err != nil {
 		log.Printf("Error querying DynamoDB: %v", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	// Marshal the messages into JSON for the payload
 	payload, err := json.Marshal(messages)
 	if err != nil {
 		log.Println("Error marshalling messages:", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	return events.APIGatewayProxyResponse{

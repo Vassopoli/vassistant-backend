@@ -58,38 +58,13 @@ type GroupMember struct {
 
 var DynamoDbClient common.DynamoDBAPI
 
-// ErrorResponse struct for JSON error messages
-type ErrorResponse struct {
-	Error string `json:"error"`
-}
-
-// createErrorResponse is a helper function to generate a JSON error response
-func createErrorResponse(statusCode int, message string) (events.APIGatewayProxyResponse, error) {
-	body, err := json.Marshal(ErrorResponse{Error: message})
-	if err != nil {
-		// This should not happen, but if it does, log it and return a generic error
-		log.Printf("Failed to marshal error response: %v", err)
-		return events.APIGatewayProxyResponse{
-			StatusCode: 500,
-			Headers:    map[string]string{"Content-Type": "application/json"},
-			Body:       `{"error":"Internal server error"}`,
-		}, nil
-	}
-
-	return events.APIGatewayProxyResponse{
-		StatusCode: statusCode,
-		Headers:    map[string]string{"Content-Type": "application/json"},
-		Body:       string(body),
-	}, nil
-}
-
 func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Printf("request: %+v\n", request)
 
 	// Extract groupId from path parameters
 	groupId, ok := request.PathParameters["groupId"]
 	if !ok || groupId == "" {
-		return createErrorResponse(400, "Group ID is missing")
+		return common.CreateErrorResponse(400, "Group ID is missing")
 	}
 
 	// Build the query input
@@ -106,7 +81,7 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 	result, err := DynamoDbClient.Query(context.TODO(), queryInput)
 	if err != nil {
 		log.Printf("Error querying DynamoDB: %v", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	// Unmarshal the Items into a slice of FinancialExpense structs
@@ -114,7 +89,7 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 	err = attributevalue.UnmarshalListOfMaps(result.Items, &expenses)
 	if err != nil {
 		log.Printf("Error unmarshalling expenses: %v", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	log.Printf("Successfully retrieved %d expenses for group %s", len(expenses), groupId)
@@ -152,7 +127,7 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 		userResult, err := DynamoDbClient.BatchGetItem(context.TODO(), batchGetItemInput)
 		if err != nil {
 			log.Printf("Error getting user details from DynamoDB: %v", err)
-			return createErrorResponse(500, "Internal server error")
+			return common.CreateErrorResponse(500, "Internal server error")
 		}
 
 		// Create a map of userId to User for easy lookup
@@ -164,7 +139,7 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 			err = attributevalue.UnmarshalMap(item, &user)
 			if err != nil {
 				log.Printf("Error unmarshalling user: %v", err)
-				return createErrorResponse(500, "Internal server error")
+				return common.CreateErrorResponse(500, "Internal server error")
 			}
 			userMap[user.UserID] = user
 		}
@@ -189,7 +164,7 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 	payload, err := json.Marshal(expenses)
 	if err != nil {
 		log.Println("Error marshalling expenses:", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	return events.APIGatewayProxyResponse{
@@ -205,7 +180,7 @@ func GetGroupUsersHandler(request events.APIGatewayProxyRequest) (events.APIGate
 	// Extract groupId from path parameters
 	groupId, ok := request.PathParameters["groupId"]
 	if !ok || groupId == "" {
-		return createErrorResponse(400, "Group ID is missing")
+		return common.CreateErrorResponse(400, "Group ID is missing")
 	}
 
 	// Build the query input
@@ -223,7 +198,7 @@ func GetGroupUsersHandler(request events.APIGatewayProxyRequest) (events.APIGate
 	result, err := DynamoDbClient.Query(context.TODO(), queryInput)
 	if err != nil {
 		log.Printf("Error querying DynamoDB: %v", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	// Unmarshal the Items into a slice of GroupMember structs
@@ -231,7 +206,7 @@ func GetGroupUsersHandler(request events.APIGatewayProxyRequest) (events.APIGate
 	err = attributevalue.UnmarshalListOfMaps(result.Items, &groupMembers)
 	if err != nil {
 		log.Printf("Error unmarshalling group members: %v", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	log.Printf("Successfully retrieved %d user IDs for group %s", len(groupMembers), groupId)
@@ -265,14 +240,14 @@ func GetGroupUsersHandler(request events.APIGatewayProxyRequest) (events.APIGate
 		userResult, err := DynamoDbClient.BatchGetItem(context.TODO(), batchGetItemInput)
 		if err != nil {
 			log.Printf("Error getting user details from DynamoDB: %v", err)
-			return createErrorResponse(500, "Internal server error")
+			return common.CreateErrorResponse(500, "Internal server error")
 		}
 
 		userItems := userResult.Responses["vassistant-users"]
 		err = attributevalue.UnmarshalListOfMaps(userItems, &users)
 		if err != nil {
 			log.Printf("Error unmarshalling user: %v", err)
-			return createErrorResponse(500, "Internal server error")
+			return common.CreateErrorResponse(500, "Internal server error")
 		}
 	}
 
@@ -282,7 +257,7 @@ func GetGroupUsersHandler(request events.APIGatewayProxyRequest) (events.APIGate
 	payload, err := json.Marshal(users)
 	if err != nil {
 		log.Println("Error marshalling users:", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	return events.APIGatewayProxyResponse{
@@ -300,14 +275,14 @@ func GetGroupHandler(request events.APIGatewayProxyRequest) (events.APIGatewayPr
 	claims, ok := authorizer["claims"].(map[string]interface{})
 	if !ok {
 		log.Println("Error: Invalid claims format")
-		return createErrorResponse(403, "Unauthorized: Invalid claims format")
+		return common.CreateErrorResponse(403, "Unauthorized: Invalid claims format")
 	}
 	sub, _ := claims["sub"].(string)
 
 	// Extract groupId from path parameters
 	groupId, ok := request.PathParameters["groupId"]
 	if !ok || groupId == "" {
-		return createErrorResponse(400, "Group ID is missing")
+		return common.CreateErrorResponse(400, "Group ID is missing")
 	}
 
 	// Build the query input
@@ -323,11 +298,11 @@ func GetGroupHandler(request events.APIGatewayProxyRequest) (events.APIGatewayPr
 	result, err := DynamoDbClient.GetItem(context.TODO(), queryInput)
 	if err != nil {
 		log.Printf("Error querying DynamoDB: %v", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	if result.Item == nil {
-		return createErrorResponse(404, "Group not found")
+		return common.CreateErrorResponse(404, "Group not found")
 	}
 
 	// Unmarshal the Items into a slice of GroupMember structs
@@ -335,7 +310,7 @@ func GetGroupHandler(request events.APIGatewayProxyRequest) (events.APIGatewayPr
 	err = attributevalue.UnmarshalMap(result.Item, &groupMember)
 	if err != nil {
 		log.Printf("Error unmarshalling group members: %v", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	log.Printf("Successfully retrieved group %s for user %s", groupId, sub)
@@ -344,7 +319,7 @@ func GetGroupHandler(request events.APIGatewayProxyRequest) (events.APIGatewayPr
 	payload, err := json.Marshal(groupMember)
 	if err != nil {
 		log.Println("Error marshalling group members:", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	return events.APIGatewayProxyResponse{
@@ -362,14 +337,14 @@ func PostGroupExpenseHandler(request events.APIGatewayProxyRequest) (events.APIG
 	claims, ok := authorizer["claims"].(map[string]interface{})
 	if !ok {
 		log.Println("Error: Invalid claims format")
-		return createErrorResponse(403, "Unauthorized: Invalid claims format")
+		return common.CreateErrorResponse(403, "Unauthorized: Invalid claims format")
 	}
 	sub, _ := claims["sub"].(string)
 
 	// Extract groupId from path parameters
 	groupId, ok := request.PathParameters["groupId"]
 	if !ok || groupId == "" {
-		return createErrorResponse(400, "Group ID is missing")
+		return common.CreateErrorResponse(400, "Group ID is missing")
 	}
 
 	// Parse the request body into a FinancialExpense struct
@@ -377,7 +352,7 @@ func PostGroupExpenseHandler(request events.APIGatewayProxyRequest) (events.APIG
 	err := json.Unmarshal([]byte(request.Body), &expense)
 	if err != nil {
 		log.Printf("Error unmarshalling request body: %v", err)
-		return createErrorResponse(400, "Invalid request body")
+		return common.CreateErrorResponse(400, "Invalid request body")
 	}
 
 	// Generate a new UUID for the expense
@@ -391,7 +366,7 @@ func PostGroupExpenseHandler(request events.APIGatewayProxyRequest) (events.APIG
 	av, err := attributevalue.MarshalMap(expense)
 	if err != nil {
 		log.Printf("Error marshalling expense: %v", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	// Build the PutItem input
@@ -404,7 +379,7 @@ func PostGroupExpenseHandler(request events.APIGatewayProxyRequest) (events.APIG
 	_, err = DynamoDbClient.PutItem(context.TODO(), putInput)
 	if err != nil {
 		log.Printf("Error putting item into DynamoDB: %v", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	log.Printf("Successfully created expense %s for group %s", expense.ExpenseID, expense.GroupID)
@@ -413,7 +388,7 @@ func PostGroupExpenseHandler(request events.APIGatewayProxyRequest) (events.APIG
 	payload, err := json.Marshal(expense)
 	if err != nil {
 		log.Println("Error marshalling expense:", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	return events.APIGatewayProxyResponse{
@@ -431,7 +406,7 @@ func GetGroupsHandler(request events.APIGatewayProxyRequest) (events.APIGatewayP
 	claims, ok := authorizer["claims"].(map[string]interface{})
 	if !ok {
 		log.Println("Error: Invalid claims format")
-		return createErrorResponse(403, "Unauthorized: Invalid claims format")
+		return common.CreateErrorResponse(403, "Unauthorized: Invalid claims format")
 	}
 	sub, _ := claims["sub"].(string)
 
@@ -449,7 +424,7 @@ func GetGroupsHandler(request events.APIGatewayProxyRequest) (events.APIGatewayP
 	result, err := DynamoDbClient.Query(context.TODO(), queryInput)
 	if err != nil {
 		log.Printf("Error querying DynamoDB: %v", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	// Unmarshal the Items into a slice of GroupMember structs
@@ -457,7 +432,7 @@ func GetGroupsHandler(request events.APIGatewayProxyRequest) (events.APIGatewayP
 	err = attributevalue.UnmarshalListOfMaps(result.Items, &groupMembers)
 	if err != nil {
 		log.Printf("Error unmarshalling group members: %v", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	log.Printf("Successfully retrieved %d groups for user %s", len(groupMembers), sub)
@@ -466,7 +441,7 @@ func GetGroupsHandler(request events.APIGatewayProxyRequest) (events.APIGatewayP
 	payload, err := json.Marshal(groupMembers)
 	if err != nil {
 		log.Println("Error marshalling group members:", err)
-		return createErrorResponse(500, "Internal server error")
+		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
 	return events.APIGatewayProxyResponse{
