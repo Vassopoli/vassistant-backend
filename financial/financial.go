@@ -194,6 +194,68 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 	}, nil
 }
 
+func GetGroupHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	log.Printf("request: %+v\n", request)
+
+	// Extract claims from the authorizer
+	authorizer := request.RequestContext.Authorizer
+	claims, ok := authorizer["claims"].(map[string]interface{})
+	if !ok {
+		log.Println("Error: Invalid claims format")
+		return createErrorResponse(403, "Unauthorized: Invalid claims format")
+	}
+	sub, _ := claims["sub"].(string)
+
+	// Extract groupId from path parameters
+	groupId, ok := request.PathParameters["groupId"]
+	if !ok || groupId == "" {
+		return createErrorResponse(400, "Group ID is missing")
+	}
+
+	// Build the query input
+	queryInput := &dynamodb.GetItemInput{
+		TableName: aws.String("splitter-group-members"),
+		Key: map[string]types.AttributeValue{
+			"userId":  &types.AttributeValueMemberS{Value: sub},
+			"groupId": &types.AttributeValueMemberS{Value: groupId},
+		},
+	}
+
+	// Make the DynamoDB Query API call
+	result, err := DynamoDbClient.GetItem(context.TODO(), queryInput)
+	if err != nil {
+		log.Printf("Error querying DynamoDB: %v", err)
+		return createErrorResponse(500, "Internal server error")
+	}
+
+	if result.Item == nil {
+		return createErrorResponse(404, "Group not found")
+	}
+
+	// Unmarshal the Items into a slice of GroupMember structs
+	var groupMember GroupMember
+	err = attributevalue.UnmarshalMap(result.Item, &groupMember)
+	if err != nil {
+		log.Printf("Error unmarshalling group members: %v", err)
+		return createErrorResponse(500, "Internal server error")
+	}
+
+	log.Printf("Successfully retrieved group %s for user %s", groupId, sub)
+
+	// Marshal the group members into JSON for the payload
+	payload, err := json.Marshal(groupMember)
+	if err != nil {
+		log.Println("Error marshalling group members:", err)
+		return createErrorResponse(500, "Internal server error")
+	}
+
+	return events.APIGatewayProxyResponse{
+		StatusCode: 200,
+		Headers:    map[string]string{"Content-Type": "application/json"},
+		Body:       string(payload),
+	}, nil
+}
+
 func PostGroupExpenseHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Printf("request: %+v\n", request)
 

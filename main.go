@@ -76,6 +76,14 @@ func rootHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyR
 			} else {
 				return createErrorResponse(405, "Method Not Allowed")
 			}
+		} else if len(parts) == 5 && parts[3] == "groups" {
+			// Path is /financial/groups/{groupId}
+			request.PathParameters = map[string]string{"groupId": parts[4]}
+			if request.HTTPMethod == "GET" {
+				return financial.GetGroupHandler(request)
+			} else {
+				return createErrorResponse(405, "Method Not Allowed")
+			}
 		} else if len(parts) == 6 && parts[3] == "groups" && parts[5] == "expenses" {
 			// Path is /financial/groups/{groupId}/expenses
 			request.PathParameters = map[string]string{"groupId": parts[4]}
