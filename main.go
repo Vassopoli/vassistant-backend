@@ -68,31 +68,41 @@ func rootHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyR
 	}
 
 	if strings.HasPrefix(request.Path, "/VassistantBackendProxy/financial/groups") {
-		parts := strings.Split(request.Path, "/")
-		if len(parts) == 4 && parts[3] == "groups" {
-			// Path is /financial/groups
+		cleanPath := strings.TrimPrefix(request.Path, "/VassistantBackendProxy/financial/groups")
+		cleanPath = strings.TrimRight(cleanPath, "/")
+		parts := strings.Split(cleanPath, "/")
+
+		// Path: /VassistantBackendProxy/financial/groups or /VassistantBackendProxy/financial/groups/
+		// cleanPath: ""
+		// parts: [""] -> len 1
+		if len(parts) == 1 && parts[0] == "" {
 			if request.HTTPMethod == "GET" {
 				return financial.GetGroupsHandler(request)
 			} else {
 				return createErrorResponse(405, "Method Not Allowed")
 			}
-		} else if len(parts) == 5 && parts[3] == "groups" {
-			// Path is /financial/groups/{groupId}
-			request.PathParameters = map[string]string{"groupId": parts[4]}
+		} else if len(parts) == 2 && parts[0] == "" { // Path: .../{groupId}
+			request.PathParameters = map[string]string{"groupId": parts[1]}
 			if request.HTTPMethod == "GET" {
 				return financial.GetGroupHandler(request)
 			} else {
 				return createErrorResponse(405, "Method Not Allowed")
 			}
-		} else if len(parts) == 6 && parts[3] == "groups" && parts[5] == "expenses" {
-			// Path is /financial/groups/{groupId}/expenses
-			request.PathParameters = map[string]string{"groupId": parts[4]}
+		} else if len(parts) == 3 && parts[0] == "" && parts[2] == "expenses" { // Path: .../{groupId}/expenses
+			request.PathParameters = map[string]string{"groupId": parts[1]}
 			switch request.HTTPMethod {
 			case "GET":
 				return financial.GetGroupExpensesHandler(request)
 			case "POST":
 				return financial.PostGroupExpenseHandler(request)
 			default:
+				return createErrorResponse(405, "Method Not Allowed")
+			}
+		} else if len(parts) == 3 && parts[0] == "" && parts[2] == "users" { // Path: .../{groupId}/users
+			request.PathParameters = map[string]string{"groupId": parts[1]}
+			if request.HTTPMethod == "GET" {
+				return financial.GetGroupUsersHandler(request)
+			} else {
 				return createErrorResponse(405, "Method Not Allowed")
 			}
 		}

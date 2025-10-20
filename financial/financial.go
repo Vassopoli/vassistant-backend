@@ -24,6 +24,7 @@ type Participant struct {
 
 // User struct for the vassistant-users table
 type User struct {
+	UserID       string `json:"userId" dynamodbav:"userId"`
 	Username     string `json:"username" dynamodbav:"username"`
 	ShowableName string `json:"showableName" dynamodbav:"showableName"`
 	Role         string `json:"role" dynamodbav:"role"`
@@ -165,13 +166,7 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 				log.Printf("Error unmarshalling user: %v", err)
 				return createErrorResponse(500, "Internal server error")
 			}
-			var userId string
-			err = attributevalue.Unmarshal(item["userId"], &userId)
-			if err != nil {
-				log.Printf("Error unmarshalling userId: %v", err)
-				return createErrorResponse(500, "Internal server error")
-			}
-			userMap[userId] = user
+			userMap[user.UserID] = user
 		}
 
 		// Populate the user details in the expenses
@@ -194,6 +189,99 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 	payload, err := json.Marshal(expenses)
 	if err != nil {
 		log.Println("Error marshalling expenses:", err)
+		return createErrorResponse(500, "Internal server error")
+	}
+
+	return events.APIGatewayProxyResponse{
+		StatusCode: 200,
+		Headers:    map[string]string{"Content-Type": "application/json"},
+		Body:       string(payload),
+	}, nil
+}
+
+func GetGroupUsersHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	log.Printf("request: %+v\n", request)
+
+	// Extract groupId from path parameters
+	groupId, ok := request.PathParameters["groupId"]
+	if !ok || groupId == "" {
+		return createErrorResponse(400, "Group ID is missing")
+	}
+
+	// Build the query input
+	queryInput := &dynamodb.QueryInput{
+		TableName:              aws.String("splitter-group-members"),
+		IndexName:              aws.String("groupId-index"),
+		KeyConditionExpression: aws.String("groupId = :groupId"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":groupId": &types.AttributeValueMemberS{Value: groupId},
+		},
+		ProjectionExpression: aws.String("userId"),
+	}
+
+	// Make the DynamoDB Query API call
+	result, err := DynamoDbClient.Query(context.TODO(), queryInput)
+	if err != nil {
+		log.Printf("Error querying DynamoDB: %v", err)
+		return createErrorResponse(500, "Internal server error")
+	}
+
+	// Unmarshal the Items into a slice of GroupMember structs
+	var groupMembers []GroupMember
+	err = attributevalue.UnmarshalListOfMaps(result.Items, &groupMembers)
+	if err != nil {
+		log.Printf("Error unmarshalling group members: %v", err)
+		return createErrorResponse(500, "Internal server error")
+	}
+
+	log.Printf("Successfully retrieved %d user IDs for group %s", len(groupMembers), groupId)
+
+	// Collect all unique user IDs from all participants
+	userIds := make(map[string]struct{})
+	for _, member := range groupMembers {
+		userIds[member.UserID] = struct{}{}
+	}
+
+	// Prepare keys for BatchGetItem
+	keys := make([]map[string]types.AttributeValue, 0, len(userIds))
+	for userId := range userIds {
+		keys = append(keys, map[string]types.AttributeValue{
+			"userId": &types.AttributeValueMemberS{Value: userId},
+		})
+	}
+
+	var users []User
+
+	// Fetch all user details in a single BatchGetItem call
+	if len(keys) > 0 {
+		batchGetItemInput := &dynamodb.BatchGetItemInput{
+			RequestItems: map[string]types.KeysAndAttributes{
+				"vassistant-users": {
+					Keys: keys,
+				},
+			},
+		}
+
+		userResult, err := DynamoDbClient.BatchGetItem(context.TODO(), batchGetItemInput)
+		if err != nil {
+			log.Printf("Error getting user details from DynamoDB: %v", err)
+			return createErrorResponse(500, "Internal server error")
+		}
+
+		userItems := userResult.Responses["vassistant-users"]
+		err = attributevalue.UnmarshalListOfMaps(userItems, &users)
+		if err != nil {
+			log.Printf("Error unmarshalling user: %v", err)
+			return createErrorResponse(500, "Internal server error")
+		}
+	}
+
+	log.Printf("Successfully retrieved %d users for group %s", len(users), groupId)
+
+	// Marshal the group members into JSON for the payload
+	payload, err := json.Marshal(users)
+	if err != nil {
+		log.Println("Error marshalling users:", err)
 		return createErrorResponse(500, "Internal server error")
 	}
 
