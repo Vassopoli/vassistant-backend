@@ -23,6 +23,78 @@ type MockDynamoDBClient struct {
 	PutItemFunc      func(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
 }
 
+func TestGetGroupUsersHandler(t *testing.T) {
+	// Set up the mock DynamoDB client
+	mockClient := &MockDynamoDBClient{
+		QueryFunc: func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+			// Create sample group members
+			groupMember1 := GroupMember{
+				UserID: "user-1",
+			}
+			groupMember2 := GroupMember{
+				UserID: "user-2",
+			}
+
+			// Marshal the group members
+			av1, err := attributevalue.MarshalMap(groupMember1)
+			if err != nil {
+				return nil, err
+			}
+			av2, err := attributevalue.MarshalMap(groupMember2)
+			if err != nil {
+				return nil, err
+			}
+
+			return &dynamodb.QueryOutput{
+				Items: []map[string]types.AttributeValue{av1, av2},
+				Count: 2,
+			}, nil
+		},
+		BatchGetItemFunc: func(ctx context.Context, params *dynamodb.BatchGetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.BatchGetItemOutput, error) {
+			// Create sample user data
+			user1 := map[string]types.AttributeValue{
+				"userId":       &types.AttributeValueMemberS{Value: "user-1"},
+				"showableName": &types.AttributeValueMemberS{Value: "User One"},
+			}
+			user2 := map[string]types.AttributeValue{
+				"userId":       &types.AttributeValueMemberS{Value: "user-2"},
+				"showableName": &types.AttributeValueMemberS{Value: "User Two"},
+			}
+			return &dynamodb.BatchGetItemOutput{
+				Responses: map[string][]map[string]types.AttributeValue{
+					"vassistant-users": {user1, user2},
+				},
+			}, nil
+		},
+	}
+	DynamoDbClient = mockClient
+
+	// Create a sample request
+	request := events.APIGatewayProxyRequest{
+		PathParameters: map[string]string{
+			"groupId": "test-group-id",
+		},
+	}
+
+	// Call the handler
+	response, err := GetGroupUsersHandler(request)
+	assert.NoError(t, err)
+
+	// Check the response
+	assert.Equal(t, http.StatusOK, response.StatusCode)
+
+	var users []User
+	err = json.Unmarshal([]byte(response.Body), &users)
+	assert.NoError(t, err)
+	assert.Len(t, users, 2)
+
+	// Verify the users
+	assert.Equal(t, "user-1", users[0].UserID)
+	assert.Equal(t, "User One", users[0].ShowableName)
+	assert.Equal(t, "user-2", users[1].UserID)
+	assert.Equal(t, "User Two", users[1].ShowableName)
+}
+
 func (m *MockDynamoDBClient) GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
 	return m.GetItemFunc(ctx, params, optFns...)
 }
