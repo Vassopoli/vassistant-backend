@@ -98,6 +98,7 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":groupId": &types.AttributeValueMemberS{Value: groupId},
 		},
+		ScanIndexForward: aws.Bool(false),
 	}
 
 	// Make the DynamoDB Query API call
