@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -19,6 +20,7 @@ type MockDynamoDBClient struct {
 	QueryFunc        func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
 	BatchGetItemFunc func(ctx context.Context, params *dynamodb.BatchGetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.BatchGetItemOutput, error)
 	GetItemFunc      func(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
+	PutItemFunc      func(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
 }
 
 func (m *MockDynamoDBClient) GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
@@ -30,8 +32,7 @@ func (m *MockDynamoDBClient) BatchGetItem(ctx context.Context, params *dynamodb.
 }
 
 func (m *MockDynamoDBClient) PutItem(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
-	// Not needed for these tests
-	return nil, nil
+	return m.PutItemFunc(ctx, params, optFns...)
 }
 
 func (m *MockDynamoDBClient) Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
@@ -102,6 +103,7 @@ func TestGetGroupExpensesHandler(t *testing.T) {
 				Description: "Test Expense",
 				Amount:      "100",
 				PaidBy:      "user-1",
+				AddedBy:     "user-3",
 				Participants: []Participant{
 					{UserID: "user-1", Share: "50"},
 					{UserID: "user-2", Share: "50"},
@@ -127,9 +129,13 @@ func TestGetGroupExpensesHandler(t *testing.T) {
 				"userId":       &types.AttributeValueMemberS{Value: "user-2"},
 				"showableName": &types.AttributeValueMemberS{Value: "User Two"},
 			}
+			user3 := map[string]types.AttributeValue{
+				"userId":       &types.AttributeValueMemberS{Value: "user-3"},
+				"showableName": &types.AttributeValueMemberS{Value: "User Three"},
+			}
 			return &dynamodb.BatchGetItemOutput{
 				Responses: map[string][]map[string]types.AttributeValue{
-					"vassistant-users": {user1, user2},
+					"vassistant-users": {user1, user2, user3},
 				},
 			}, nil
 		},
@@ -160,6 +166,8 @@ func TestGetGroupExpensesHandler(t *testing.T) {
 	assert.Equal(t, "test-expense-id", expense.ExpenseID)
 	assert.Equal(t, "user-1", expense.PaidBy)
 	assert.Equal(t, "User One", expense.PaidByUser.ShowableName)
+	assert.Equal(t, "user-3", expense.AddedBy)
+	assert.Equal(t, "User Three", expense.AddedByUser.ShowableName)
 	assert.Len(t, expense.Participants, 2)
 	assert.Equal(t, "user-1", expense.Participants[0].UserID)
 	assert.Equal(t, "User One", expense.Participants[0].User.ShowableName)
@@ -218,4 +226,63 @@ func TestGetGroupHandler(t *testing.T) {
 	assert.Equal(t, "test-user-id", groupMember.UserID)
 	assert.Equal(t, "test-group-id", groupMember.GroupID)
 	assert.Equal(t, "Test Group", groupMember.GroupName)
+}
+
+func TestPostGroupExpenseHandler(t *testing.T) {
+	// Set up the mock DynamoDB client
+	mockClient := &MockDynamoDBClient{
+		PutItemFunc: func(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
+			return &dynamodb.PutItemOutput{}, nil
+		},
+	}
+	DynamoDbClient = mockClient
+
+	// Create a sample request body
+	expense := FinancialExpense{
+		Description: "Test Expense",
+		Amount:      "100",
+		PaidBy:      "user-1",
+		Participants: []Participant{
+			{UserID: "user-1", Share: "50"},
+			{UserID: "user-2", Share: "50"},
+		},
+	}
+	body, err := json.Marshal(expense)
+	assert.NoError(t, err)
+
+	// Create a sample request
+	request := events.APIGatewayProxyRequest{
+		RequestContext: events.APIGatewayProxyRequestContext{
+			Authorizer: map[string]interface{}{
+				"claims": map[string]interface{}{
+					"sub": "test-user-id",
+				},
+			},
+		},
+		PathParameters: map[string]string{
+			"groupId": "test-group-id",
+		},
+		Body: string(body),
+	}
+
+	// Call the handler
+	response, err := PostGroupExpenseHandler(request)
+	assert.NoError(t, err)
+
+	// Check the response
+	assert.Equal(t, http.StatusCreated, response.StatusCode)
+
+	var createdExpense FinancialExpense
+	err = json.Unmarshal([]byte(response.Body), &createdExpense)
+	assert.NoError(t, err)
+
+	// Verify the created expense
+	assert.NotEmpty(t, createdExpense.ExpenseID)
+	assert.Equal(t, "test-group-id", createdExpense.GroupID)
+	assert.Equal(t, "test-user-id", createdExpense.AddedBy)
+	assert.NotEmpty(t, createdExpense.AddedAt)
+
+	// Check if AddedAt is a valid timestamp
+	_, err = time.Parse(time.RFC3339, createdExpense.AddedAt)
+	assert.NoError(t, err)
 }

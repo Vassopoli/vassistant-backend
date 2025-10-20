@@ -43,6 +43,9 @@ type FinancialExpense struct {
 	Participants []Participant `json:"participants" dynamodbav:"participants"`
 	Settled      bool          `json:"settled" dynamodbav:"settled"`
 	PaidByUser   User          `json:"paidByUser" dynamodbav:"-"`
+	AddedBy      string        `json:"addedBy" dynamodbav:"addedBy"`
+	AddedAt      string        `json:"addedAt" dynamodbav:"addedAt"`
+	AddedByUser  User          `json:"addedByUser" dynamodbav:"-"`
 }
 
 // GroupMember struct for the splitter-group-members table
@@ -118,6 +121,9 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 	userIds := make(map[string]struct{})
 	for _, expense := range expenses {
 		userIds[expense.PaidBy] = struct{}{}
+		if expense.AddedBy != "" {
+			userIds[expense.AddedBy] = struct{}{}
+		}
 		for _, participant := range expense.Participants {
 			userIds[participant.UserID] = struct{}{}
 		}
@@ -171,6 +177,9 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 		for i, expense := range expenses {
 			if user, ok := userMap[expense.PaidBy]; ok {
 				expenses[i].PaidByUser = user
+			}
+			if user, ok := userMap[expense.AddedBy]; ok {
+				expenses[i].AddedByUser = user
 			}
 			for j, participant := range expense.Participants {
 				if user, ok := userMap[participant.UserID]; ok {
@@ -259,6 +268,15 @@ func GetGroupHandler(request events.APIGatewayProxyRequest) (events.APIGatewayPr
 func PostGroupExpenseHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Printf("request: %+v\n", request)
 
+	// Extract claims from the authorizer
+	authorizer := request.RequestContext.Authorizer
+	claims, ok := authorizer["claims"].(map[string]interface{})
+	if !ok {
+		log.Println("Error: Invalid claims format")
+		return createErrorResponse(403, "Unauthorized: Invalid claims format")
+	}
+	sub, _ := claims["sub"].(string)
+
 	// Extract groupId from path parameters
 	groupId, ok := request.PathParameters["groupId"]
 	if !ok || groupId == "" {
@@ -277,6 +295,8 @@ func PostGroupExpenseHandler(request events.APIGatewayProxyRequest) (events.APIG
 	expense.ExpenseID = uuid.New().String()
 	expense.GroupID = groupId
 	expense.DateTime = time.Now().Format(time.RFC3339)
+	expense.AddedBy = sub
+	expense.AddedAt = time.Now().Format(time.RFC3339)
 
 	// Marshal the expense into a DynamoDB attribute value map
 	av, err := attributevalue.MarshalMap(expense)
