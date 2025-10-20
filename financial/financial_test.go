@@ -96,11 +96,16 @@ func TestGetGroupExpensesHandler(t *testing.T) {
 	// Set up the mock DynamoDB client
 	mockClient := &MockDynamoDBClient{
 		QueryFunc: func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
-			// Create a sample expense
-			expense := FinancialExpense{
-				ExpenseID:   "test-expense-id",
+			// Assert that the query is asking for descending order
+			assert.NotNil(t, params.ScanIndexForward)
+			assert.False(t, *params.ScanIndexForward)
+
+			// Create sample expenses
+			expense1 := FinancialExpense{
+				ExpenseID:   "test-expense-1",
 				GroupID:     "test-group-id",
-				Description: "Test Expense",
+				Description: "Older Expense",
+				DateTime:    "2023-01-01T00:00:00Z",
 				Amount:      "100",
 				PaidBy:      "user-1",
 				AddedBy:     "user-3",
@@ -109,14 +114,34 @@ func TestGetGroupExpensesHandler(t *testing.T) {
 					{UserID: "user-2", Share: "50"},
 				},
 			}
-			// Marshal the expense into a DynamoDB attribute value map
-			av, err := attributevalue.MarshalMap(expense)
+			expense2 := FinancialExpense{
+				ExpenseID:   "test-expense-2",
+				GroupID:     "test-group-id",
+				Description: "Newer Expense",
+				DateTime:    "2023-01-02T00:00:00Z",
+				Amount:      "200",
+				PaidBy:      "user-2",
+				AddedBy:     "user-3",
+				Participants: []Participant{
+					{UserID: "user-1", Share: "100"},
+					{UserID: "user-2", Share: "100"},
+				},
+			}
+
+			// Marshal the expenses
+			av1, err := attributevalue.MarshalMap(expense1)
 			if err != nil {
 				return nil, err
 			}
+			av2, err := attributevalue.MarshalMap(expense2)
+			if err != nil {
+				return nil, err
+			}
+
+			// Return the items as DynamoDB would: sorted descending
 			return &dynamodb.QueryOutput{
-				Items: []map[string]types.AttributeValue{av},
-				Count: 1,
+				Items: []map[string]types.AttributeValue{av2, av1},
+				Count: 2,
 			}, nil
 		},
 		BatchGetItemFunc: func(ctx context.Context, params *dynamodb.BatchGetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.BatchGetItemOutput, error) {
@@ -159,20 +184,28 @@ func TestGetGroupExpensesHandler(t *testing.T) {
 	var expenses []FinancialExpense
 	err = json.Unmarshal([]byte(response.Body), &expenses)
 	assert.NoError(t, err)
-	assert.Len(t, expenses, 1)
+	assert.Len(t, expenses, 2)
 
-	// Verify the expense and participants
-	expense := expenses[0]
-	assert.Equal(t, "test-expense-id", expense.ExpenseID)
-	assert.Equal(t, "user-1", expense.PaidBy)
-	assert.Equal(t, "User One", expense.PaidByUser.ShowableName)
-	assert.Equal(t, "user-3", expense.AddedBy)
-	assert.Equal(t, "User Three", expense.AddedByUser.ShowableName)
-	assert.Len(t, expense.Participants, 2)
-	assert.Equal(t, "user-1", expense.Participants[0].UserID)
-	assert.Equal(t, "User One", expense.Participants[0].User.ShowableName)
-	assert.Equal(t, "user-2", expense.Participants[1].UserID)
-	assert.Equal(t, "User Two", expense.Participants[1].User.ShowableName)
+	// Verify that the handler returns the expenses in the order they were received
+	assert.Equal(t, "test-expense-2", expenses[0].ExpenseID)
+	assert.Equal(t, "test-expense-1", expenses[1].ExpenseID)
+
+	// Verify the first expense's details
+	expense1 := expenses[0]
+	assert.Equal(t, "user-2", expense1.PaidBy)
+	assert.Equal(t, "User Two", expense1.PaidByUser.ShowableName)
+	assert.Equal(t, "user-3", expense1.AddedBy)
+	assert.Equal(t, "User Three", expense1.AddedByUser.ShowableName)
+	assert.Len(t, expense1.Participants, 2)
+	assert.Equal(t, "user-1", expense1.Participants[0].UserID)
+	assert.Equal(t, "User One", expense1.Participants[0].User.ShowableName)
+	assert.Equal(t, "user-2", expense1.Participants[1].UserID)
+	assert.Equal(t, "User Two", expense1.Participants[1].User.ShowableName)
+
+	// Verify the second expense's details
+	expense2 := expenses[1]
+	assert.Equal(t, "user-1", expense2.PaidBy)
+	assert.Equal(t, "User One", expense2.PaidByUser.ShowableName)
 }
 
 func TestGetGroupHandler(t *testing.T) {
