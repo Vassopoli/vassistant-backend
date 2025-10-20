@@ -18,6 +18,11 @@ type MockDynamoDBClient struct {
 	common.DynamoDBAPI
 	QueryFunc        func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
 	BatchGetItemFunc func(ctx context.Context, params *dynamodb.BatchGetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.BatchGetItemOutput, error)
+	GetItemFunc      func(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
+}
+
+func (m *MockDynamoDBClient) GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+	return m.GetItemFunc(ctx, params, optFns...)
 }
 
 func (m *MockDynamoDBClient) BatchGetItem(ctx context.Context, params *dynamodb.BatchGetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.BatchGetItemOutput, error) {
@@ -160,4 +165,57 @@ func TestGetGroupExpensesHandler(t *testing.T) {
 	assert.Equal(t, "User One", expense.Participants[0].User.ShowableName)
 	assert.Equal(t, "user-2", expense.Participants[1].UserID)
 	assert.Equal(t, "User Two", expense.Participants[1].User.ShowableName)
+}
+
+func TestGetGroupHandler(t *testing.T) {
+	// Set up the mock DynamoDB client
+	mockClient := &MockDynamoDBClient{
+		GetItemFunc: func(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+			// Create a sample group member
+			groupMember := GroupMember{
+				UserID:    "test-user-id",
+				GroupID:   "test-group-id",
+				GroupName: "Test Group",
+			}
+			// Marshal the group member into a DynamoDB attribute value map
+			av, err := attributevalue.MarshalMap(groupMember)
+			if err != nil {
+				return nil, err
+			}
+			return &dynamodb.GetItemOutput{
+				Item: av,
+			}, nil
+		},
+	}
+	DynamoDbClient = mockClient
+
+	// Create a sample request
+	request := events.APIGatewayProxyRequest{
+		RequestContext: events.APIGatewayProxyRequestContext{
+			Authorizer: map[string]interface{}{
+				"claims": map[string]interface{}{
+					"sub": "test-user-id",
+				},
+			},
+		},
+		PathParameters: map[string]string{
+			"groupId": "test-group-id",
+		},
+	}
+
+	// Call the handler
+	response, err := GetGroupHandler(request)
+	assert.NoError(t, err)
+
+	// Check the response
+	assert.Equal(t, http.StatusOK, response.StatusCode)
+
+	var groupMember GroupMember
+	err = json.Unmarshal([]byte(response.Body), &groupMember)
+	assert.NoError(t, err)
+
+	// Verify the group member
+	assert.Equal(t, "test-user-id", groupMember.UserID)
+	assert.Equal(t, "test-group-id", groupMember.GroupID)
+	assert.Equal(t, "Test Group", groupMember.GroupName)
 }
