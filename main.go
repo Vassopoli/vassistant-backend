@@ -2,9 +2,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"log"
-	"strings"
+	"vassistant-backend/api"
 	"vassistant-backend/financial"
 	"vassistant-backend/messages"
 
@@ -13,6 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 )
+
+var router *api.Router
 
 func init() {
 	// Load the Shared AWS Configuration (~/.aws/config)
@@ -25,90 +26,22 @@ func init() {
 	dynamoDbClient := dynamodb.NewFromConfig(cfg)
 	messages.DynamoDbClient = dynamoDbClient
 	financial.DynamoDbClient = dynamoDbClient
-}
 
-// ErrorResponse struct for JSON error messages
-type ErrorResponse struct {
-	Error string `json:"error"`
-}
-
-// createErrorResponse is a helper function to generate a JSON error response
-func createErrorResponse(statusCode int, message string) (events.APIGatewayProxyResponse, error) {
-	body, err := json.Marshal(ErrorResponse{Error: message})
-	if err != nil {
-		// This should not happen, but if it does, log it and return a generic error
-		log.Printf("Failed to marshal error response: %v", err)
-		return events.APIGatewayProxyResponse{
-			StatusCode: 500,
-			Headers:    map[string]string{"Content-Type": "application/json"},
-			Body:       `{"error":"Internal server error"}`,
-		}, nil
-	}
-
-	return events.APIGatewayProxyResponse{
-		StatusCode: statusCode,
-		Headers:    map[string]string{"Content-Type": "application/json"},
-		Body:       string(body),
-	}, nil
+	// Initialize the router
+	router = api.NewRouter()
+	router.AddRoute("POST", "/VassistantBackendProxy/messages", messages.PostMessageHandler)
+	router.AddRoute("GET", "/VassistantBackendProxy/messages", messages.GetMessageHandler)
+	router.AddRoute("GET", "/VassistantBackendProxy/financial/groups", financial.GetGroupsHandler)
+	router.AddRoute("GET", "/VassistantBackendProxy/financial/groups/(?P<groupId>[^/]+)", financial.GetGroupHandler)
+	router.AddRoute("GET", "/VassistantBackendProxy/financial/groups/(?P<groupId>[^/]+)/expenses", financial.GetGroupExpensesHandler)
+	router.AddRoute("POST", "/VassistantBackendProxy/financial/groups/(?P<groupId>[^/]+)/expenses", financial.PostGroupExpenseHandler)
+	router.AddRoute("GET", "/VassistantBackendProxy/financial/groups/(?P<groupId>[^/]+)/users", financial.GetGroupUsersHandler)
 }
 
 func rootHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Println("Request path:", request.Path)
 	log.Println("Request HTTP method:", request.HTTPMethod)
-
-	if request.Path == "/VassistantBackendProxy/messages" {
-		switch request.HTTPMethod {
-		case "POST":
-			return messages.PostMessageHandler(request)
-		case "GET":
-			return messages.GetMessageHandler(request)
-		default:
-			return createErrorResponse(405, "Method Not Allowed")
-		}
-	}
-
-	if strings.HasPrefix(request.Path, "/VassistantBackendProxy/financial/groups") {
-		cleanPath := strings.TrimPrefix(request.Path, "/VassistantBackendProxy/financial/groups")
-		cleanPath = strings.TrimRight(cleanPath, "/")
-		parts := strings.Split(cleanPath, "/")
-
-		// Path: /VassistantBackendProxy/financial/groups or /VassistantBackendProxy/financial/groups/
-		// cleanPath: ""
-		// parts: [""] -> len 1
-		if len(parts) == 1 && parts[0] == "" {
-			if request.HTTPMethod == "GET" {
-				return financial.GetGroupsHandler(request)
-			} else {
-				return createErrorResponse(405, "Method Not Allowed")
-			}
-		} else if len(parts) == 2 && parts[0] == "" { // Path: .../{groupId}
-			request.PathParameters = map[string]string{"groupId": parts[1]}
-			if request.HTTPMethod == "GET" {
-				return financial.GetGroupHandler(request)
-			} else {
-				return createErrorResponse(405, "Method Not Allowed")
-			}
-		} else if len(parts) == 3 && parts[0] == "" && parts[2] == "expenses" { // Path: .../{groupId}/expenses
-			request.PathParameters = map[string]string{"groupId": parts[1]}
-			switch request.HTTPMethod {
-			case "GET":
-				return financial.GetGroupExpensesHandler(request)
-			case "POST":
-				return financial.PostGroupExpenseHandler(request)
-			default:
-				return createErrorResponse(405, "Method Not Allowed")
-			}
-		} else if len(parts) == 3 && parts[0] == "" && parts[2] == "users" { // Path: .../{groupId}/users
-			request.PathParameters = map[string]string{"groupId": parts[1]}
-			if request.HTTPMethod == "GET" {
-				return financial.GetGroupUsersHandler(request)
-			} else {
-				return createErrorResponse(405, "Method Not Allowed")
-			}
-		}
-	}
-
-	return createErrorResponse(404, "Not Found")
+	return router.Serve(request)
 }
 
 func main() {
