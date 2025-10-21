@@ -394,3 +394,21 @@ func TestPostGroupExpenseHandler(t *testing.T) {
 	_, err = time.Parse(time.RFC3339, createdExpense.AddedAt)
 	assert.NoError(t, err)
 }
+
+func TestGetExpenseCategoriesHandler(t *testing.T) {
+	// Create a sample request
+	request := events.APIGatewayProxyRequest{}
+
+	// Call the handler
+	response, err := GetExpenseCategoriesHandler(request)
+	assert.NoError(t, err)
+
+	// Check the response
+	assert.Equal(t, http.StatusOK, response.StatusCode)
+
+	var categories []string
+	err = json.Unmarshal([]byte(response.Body), &categories)
+	assert.NoError(t, err)
+	assert.Len(t, categories, 1)
+	assert.Equal(t, "FOOD", categories[0])
+}
