@@ -343,9 +343,11 @@ func TestPostGroupExpenseHandler(t *testing.T) {
 	DynamoDbClient = mockClient
 
 	// Create a sample request body
+	testDateTime := "2024-01-02T15:04:05Z"
 	expense := FinancialExpense{
 		Description: "Test Expense",
 		Amount:      "100",
+		DateTime:    testDateTime,
 		PaidBy:      "user-1",
 		Participants: []Participant{
 			{UserID: "user-1", Share: "50"},
@@ -386,6 +388,7 @@ func TestPostGroupExpenseHandler(t *testing.T) {
 	assert.Equal(t, "test-group-id", createdExpense.GroupID)
 	assert.Equal(t, "test-user-id", createdExpense.AddedBy)
 	assert.NotEmpty(t, createdExpense.AddedAt)
+	assert.Equal(t, testDateTime, createdExpense.DateTime)
 
 	// Check if AddedAt is a valid timestamp
 	_, err = time.Parse(time.RFC3339, createdExpense.AddedAt)
