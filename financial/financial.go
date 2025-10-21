@@ -174,6 +174,24 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 	}, nil
 }
 
+func GetExpenseCategoriesHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	log.Printf("request: %+v\n", request)
+
+	categories := []string{"FOOD"}
+
+	payload, err := json.Marshal(categories)
+	if err != nil {
+		log.Println("Error marshalling categories:", err)
+		return common.CreateErrorResponse(500, "Internal server error")
+	}
+
+	return events.APIGatewayProxyResponse{
+		StatusCode: 200,
+		Headers:    map[string]string{"Content-Type": "application/json"},
+		Body:       string(payload),
+	}, nil
+}
+
 func GetExpenseSplitTypeHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Printf("request: %+v\n", request)
 
