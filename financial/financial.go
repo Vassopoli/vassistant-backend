@@ -174,6 +174,24 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 	}, nil
 }
 
+func GetExpenseSplitTypeHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	log.Printf("request: %+v\n", request)
+
+	splitTypes := []string{"PERCENTAGE"}
+
+	payload, err := json.Marshal(splitTypes)
+	if err != nil {
+		log.Println("Error marshalling split types:", err)
+		return common.CreateErrorResponse(500, "Internal server error")
+	}
+
+	return events.APIGatewayProxyResponse{
+		StatusCode: 200,
+		Headers:    map[string]string{"Content-Type": "application/json"},
+		Body:       string(payload),
+	}, nil
+}
+
 func GetGroupUsersHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Printf("request: %+v\n", request)
 
