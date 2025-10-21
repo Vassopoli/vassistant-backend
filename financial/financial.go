@@ -376,7 +376,6 @@ func PostGroupExpenseHandler(request events.APIGatewayProxyRequest) (events.APIG
 	// Generate a new UUID for the expense
 	expense.ExpenseID = uuid.New().String()
 	expense.GroupID = groupId
-	expense.DateTime = time.Now().Format(time.RFC3339)
 	expense.AddedBy = sub
 	expense.AddedAt = time.Now().Format(time.RFC3339)
 
