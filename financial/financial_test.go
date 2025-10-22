@@ -176,11 +176,11 @@ func TestGetGroupExpensesHandler(t *testing.T) {
 			expense1 := FinancialExpense{
 				ExpenseID:   "test-expense-1",
 				GroupID:     "test-group-id",
-				Description: "Older Expense",
+				Title: "Older Expense",
 				DateTime:    "2023-01-01T00:00:00Z",
 				Amount:      "100",
 				PaidBy:      "user-1",
-				AddedBy:     "user-3",
+				CreatedBy:     "user-3",
 				Participants: []Participant{
 					{UserID: "user-1", Share: "50"},
 					{UserID: "user-2", Share: "50"},
@@ -189,11 +189,11 @@ func TestGetGroupExpensesHandler(t *testing.T) {
 			expense2 := FinancialExpense{
 				ExpenseID:   "test-expense-2",
 				GroupID:     "test-group-id",
-				Description: "Newer Expense",
+				Title: "Newer Expense",
 				DateTime:    "2023-01-02T00:00:00Z",
 				Amount:      "200",
 				PaidBy:      "user-2",
-				AddedBy:     "user-3",
+				CreatedBy:     "user-3",
 				Participants: []Participant{
 					{UserID: "user-1", Share: "100"},
 					{UserID: "user-2", Share: "100"},
@@ -266,8 +266,8 @@ func TestGetGroupExpensesHandler(t *testing.T) {
 	expense1 := expenses[0]
 	assert.Equal(t, "user-2", expense1.PaidBy)
 	assert.Equal(t, "User Two", expense1.PaidByUser.ShowableName)
-	assert.Equal(t, "user-3", expense1.AddedBy)
-	assert.Equal(t, "User Three", expense1.AddedByUser.ShowableName)
+	assert.Equal(t, "user-3", expense1.CreatedBy)
+	assert.Equal(t, "User Three", expense1.CreatedByUser.ShowableName)
 	assert.Len(t, expense1.Participants, 2)
 	assert.Equal(t, "user-1", expense1.Participants[0].UserID)
 	assert.Equal(t, "User One", expense1.Participants[0].User.ShowableName)
@@ -345,7 +345,7 @@ func TestPostGroupExpenseHandler(t *testing.T) {
 	// Create a sample request body
 	testDateTime := "2024-01-02T15:04:05Z"
 	expense := FinancialExpense{
-		Description: "Test Expense",
+		Title: "Test Expense",
 		Amount:      "100",
 		DateTime:    testDateTime,
 		PaidBy:      "user-1",
@@ -386,12 +386,12 @@ func TestPostGroupExpenseHandler(t *testing.T) {
 	// Verify the created expense
 	assert.NotEmpty(t, createdExpense.ExpenseID)
 	assert.Equal(t, "test-group-id", createdExpense.GroupID)
-	assert.Equal(t, "test-user-id", createdExpense.AddedBy)
-	assert.NotEmpty(t, createdExpense.AddedAt)
+	assert.Equal(t, "test-user-id", createdExpense.CreatedBy)
+	assert.NotEmpty(t, createdExpense.CreatedAt)
 	assert.Equal(t, testDateTime, createdExpense.DateTime)
 
-	// Check if AddedAt is a valid timestamp
-	_, err = time.Parse(time.RFC3339, createdExpense.AddedAt)
+	// Check if CreatedAt is a valid timestamp
+	_, err = time.Parse(time.RFC3339, createdExpense.CreatedAt)
 	assert.NoError(t, err)
 }
 
