@@ -34,7 +34,7 @@ type User struct {
 type FinancialExpense struct {
 	ExpenseID    string        `json:"expenseId" dynamodbav:"expenseId"`
 	GroupID      string        `json:"groupId" dynamodbav:"groupId"`
-	Description  string        `json:"description" dynamodbav:"description"`
+	Title  string        `json:"title" dynamodbav:"title"`
 	Category     string        `json:"category" dynamodbav:"category"`
 	Amount       json.Number   `json:"amount" dynamodbav:"amount"`
 	DateTime     string        `json:"dateTime" dynamodbav:"dateTime"`
@@ -44,9 +44,9 @@ type FinancialExpense struct {
 	Participants []Participant `json:"participants" dynamodbav:"participants"`
 	Settled      bool          `json:"settled" dynamodbav:"settled"`
 	PaidByUser   User          `json:"paidByUser" dynamodbav:"-"`
-	AddedBy      string        `json:"addedBy" dynamodbav:"addedBy"`
-	AddedAt      string        `json:"addedAt" dynamodbav:"addedAt"`
-	AddedByUser  User          `json:"addedByUser" dynamodbav:"-"`
+	CreatedBy      string        `json:"createdBy" dynamodbav:"createdBy"`
+	CreatedAt      string        `json:"createdAt" dynamodbav:"createdAt"`
+	CreatedByUser  User          `json:"createdByUser" dynamodbav:"-"`
 }
 
 // GroupMember struct for the splitter-group-members table
@@ -98,8 +98,8 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 	userIds := make(map[string]struct{})
 	for _, expense := range expenses {
 		userIds[expense.PaidBy] = struct{}{}
-		if expense.AddedBy != "" {
-			userIds[expense.AddedBy] = struct{}{}
+		if expense.CreatedBy != "" {
+			userIds[expense.CreatedBy] = struct{}{}
 		}
 		for _, participant := range expense.Participants {
 			userIds[participant.UserID] = struct{}{}
@@ -149,8 +149,8 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 			if user, ok := userMap[expense.PaidBy]; ok {
 				expenses[i].PaidByUser = user
 			}
-			if user, ok := userMap[expense.AddedBy]; ok {
-				expenses[i].AddedByUser = user
+			if user, ok := userMap[expense.CreatedBy]; ok {
+				expenses[i].CreatedByUser = user
 			}
 			for j, participant := range expense.Participants {
 				if user, ok := userMap[participant.UserID]; ok {
@@ -394,8 +394,8 @@ func PostGroupExpenseHandler(request events.APIGatewayProxyRequest) (events.APIG
 	// Generate a new UUID for the expense
 	expense.ExpenseID = uuid.New().String()
 	expense.GroupID = groupId
-	expense.AddedBy = sub
-	expense.AddedAt = time.Now().Format(time.RFC3339)
+	expense.CreatedBy = sub
+	expense.CreatedAt = time.Now().Format(time.RFC3339)
 
 	// Marshal the expense into a DynamoDB attribute value map
 	av, err := attributevalue.MarshalMap(expense)
