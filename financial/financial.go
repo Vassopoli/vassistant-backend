@@ -42,7 +42,6 @@ type FinancialExpense struct {
 	ImageURL     string        `json:"imageUrl" dynamodbav:"imageUrl"`
 	SplitType    string        `json:"splitType" dynamodbav:"splitType"`
 	Participants []Participant `json:"participants" dynamodbav:"participants"`
-	Settled      bool          `json:"settled" dynamodbav:"settled"`
 	PaidByUser   User          `json:"paidByUser" dynamodbav:"-"`
 	CreatedBy      string        `json:"createdBy" dynamodbav:"createdBy"`
 	CreatedAt      string        `json:"createdAt" dynamodbav:"createdAt"`
