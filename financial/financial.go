@@ -191,6 +191,7 @@ func GetExpenseHandler(request events.APIGatewayProxyRequest) (events.APIGateway
 	getItemInput := &dynamodb.GetItemInput{
 		TableName: aws.String("splitter-expenses"),
 		Key: map[string]types.AttributeValue{
+			"groupId":   &types.AttributeValueMemberS{Value: groupId},
 			"expenseId": &types.AttributeValueMemberS{Value: expenseId},
 		},
 	}
@@ -213,11 +214,6 @@ func GetExpenseHandler(request events.APIGatewayProxyRequest) (events.APIGateway
 	if err != nil {
 		log.Printf("Error unmarshalling expense: %v", err)
 		return common.CreateErrorResponse(500, "Internal server error")
-	}
-
-	// Verify that the retrieved expense belongs to the correct group
-	if expense.GroupID != groupId {
-		return common.CreateErrorResponse(404, "Expense not found in this group")
 	}
 
 	log.Printf("Successfully retrieved expense %s for group %s", expense.ExpenseID, expense.GroupID)

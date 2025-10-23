@@ -412,3 +412,99 @@ func TestGetExpenseCategoriesHandler(t *testing.T) {
 	assert.Len(t, categories, 1)
 	assert.Equal(t, "FOOD", categories[0])
 }
+
+func TestGetExpenseHandler(t *testing.T) {
+	// Set up the mock DynamoDB client
+	mockClient := &MockDynamoDBClient{
+		GetItemFunc: func(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+			// Create a sample expense
+			expense := FinancialExpense{
+				ExpenseID: "test-expense-id",
+				GroupID:   "test-group-id",
+				PaidBy:    "user-1",
+				CreatedBy:   "user-2",
+				Participants: []Participant{
+					{UserID: "user-1", Share: "50"},
+					{UserID: "user-2", Share: "50"},
+				},
+			}
+			// Marshal the expense into a DynamoDB attribute value map
+			av, err := attributevalue.MarshalMap(expense)
+			if err != nil {
+				return nil, err
+			}
+			return &dynamodb.GetItemOutput{
+				Item: av,
+			}, nil
+		},
+		BatchGetItemFunc: func(ctx context.Context, params *dynamodb.BatchGetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.BatchGetItemOutput, error) {
+			// Create sample user data
+			user1 := map[string]types.AttributeValue{
+				"userId":       &types.AttributeValueMemberS{Value: "user-1"},
+				"showableName": &types.AttributeValueMemberS{Value: "User One"},
+			}
+			user2 := map[string]types.AttributeValue{
+				"userId":       &types.AttributeValueMemberS{Value: "user-2"},
+				"showableName": &types.AttributeValueMemberS{Value: "User Two"},
+			}
+			return &dynamodb.BatchGetItemOutput{
+				Responses: map[string][]map[string]types.AttributeValue{
+					"vassistant-users": {user1, user2},
+				},
+			}, nil
+		},
+	}
+	DynamoDbClient = mockClient
+
+	// Create a sample request
+	request := events.APIGatewayProxyRequest{
+		PathParameters: map[string]string{
+			"groupId":   "test-group-id",
+			"expenseId": "test-expense-id",
+		},
+	}
+
+	// Call the handler
+	response, err := GetExpenseHandler(request)
+	assert.NoError(t, err)
+
+	// Check the response
+	assert.Equal(t, http.StatusOK, response.StatusCode)
+
+	var fetchedExpense FinancialExpense
+	err = json.Unmarshal([]byte(response.Body), &fetchedExpense)
+	assert.NoError(t, err)
+
+	// Verify the expense details
+	assert.Equal(t, "test-expense-id", fetchedExpense.ExpenseID)
+	assert.Equal(t, "test-group-id", fetchedExpense.GroupID)
+	assert.Equal(t, "User One", fetchedExpense.PaidByUser.ShowableName)
+	assert.Equal(t, "User Two", fetchedExpense.CreatedByUser.ShowableName)
+}
+
+func TestGetExpenseHandlerNotFound(t *testing.T) {
+	// Set up the mock DynamoDB client to return not found
+	mockClient := &MockDynamoDBClient{
+		GetItemFunc: func(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+			return &dynamodb.GetItemOutput{
+				Item: nil, // Simulate not found
+			}, nil
+		},
+	}
+	DynamoDbClient = mockClient
+
+	// Create a sample request
+	request := events.APIGatewayProxyRequest{
+		PathParameters: map[string]string{
+			"groupId":   "test-group-id",
+			"expenseId": "non-existent-expense-id",
+		},
+	}
+
+	// Call the handler
+	response, err := GetExpenseHandler(request)
+	assert.NoError(t, err)
+
+	// Check the response for 404 Not Found
+	assert.Equal(t, http.StatusNotFound, response.StatusCode)
+}
