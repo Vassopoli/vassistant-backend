@@ -117,9 +117,10 @@ func TestGetGroupsHandler(t *testing.T) {
 		QueryFunc: func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
 			// Create a sample group member
 			groupMember := GroupMember{
-				UserID:    "test-user-id",
-				GroupID:   "test-group-id",
-				GroupName: "Test Group",
+				UserID:     "test-user-id",
+				GroupID:    "test-group-id",
+				GroupName:  "Test Group",
+				GroupImage: "test-image-url",
 			}
 			// Marshal the group member into a DynamoDB attribute value map
 			av, err := attributevalue.MarshalMap(groupMember)
@@ -286,9 +287,10 @@ func TestGetGroupHandler(t *testing.T) {
 		GetItemFunc: func(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
 			// Create a sample group member
 			groupMember := GroupMember{
-				UserID:    "test-user-id",
-				GroupID:   "test-group-id",
-				GroupName: "Test Group",
+				UserID:     "test-user-id",
+				GroupID:    "test-group-id",
+				GroupName:  "Test Group",
+				GroupImage: "test-image-url",
 			}
 			// Marshal the group member into a DynamoDB attribute value map
 			av, err := attributevalue.MarshalMap(groupMember)
@@ -331,6 +333,7 @@ func TestGetGroupHandler(t *testing.T) {
 	assert.Equal(t, "test-user-id", groupMember.UserID)
 	assert.Equal(t, "test-group-id", groupMember.GroupID)
 	assert.Equal(t, "Test Group", groupMember.GroupName)
+	assert.Equal(t, "test-image-url", groupMember.GroupImage)
 }
 
 func TestPostGroupExpenseHandler(t *testing.T) {
