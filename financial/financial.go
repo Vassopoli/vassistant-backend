@@ -50,9 +50,10 @@ type FinancialExpense struct {
 
 // GroupMember struct for the splitter-group-members table
 type GroupMember struct {
-	UserID    string `json:"userId" dynamodbav:"userId"`
-	GroupID   string `json:"groupId" dynamodbav:"groupId"`
-	GroupName string `json:"groupName" dynamodbav:"groupName"`
+	UserID     string `json:"userId" dynamodbav:"userId"`
+	GroupID    string `json:"groupId" dynamodbav:"groupId"`
+	GroupName  string `json:"groupName" dynamodbav:"groupName"`
+	GroupImage string `json:"groupImage" dynamodbav:"groupImage"`
 }
 
 var DynamoDbClient common.DynamoDBAPI
