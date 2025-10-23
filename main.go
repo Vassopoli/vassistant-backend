@@ -34,6 +34,7 @@ func init() {
 	router.AddRoute("GET", "/VassistantBackendProxy/financial/groups", financial.GetGroupsHandler)
 	router.AddRoute("GET", "/VassistantBackendProxy/financial/groups/(?P<groupId>[^/]+)", financial.GetGroupHandler)
 	router.AddRoute("GET", "/VassistantBackendProxy/financial/groups/(?P<groupId>[^/]+)/expenses", financial.GetGroupExpensesHandler)
+	router.AddRoute("GET", "/VassistantBackendProxy/financial/groups/(?P<groupId>[^/]+)/expenses/(?P<expenseId>[^/]+)", financial.GetExpenseHandler)
 	router.AddRoute("POST", "/VassistantBackendProxy/financial/groups/(?P<groupId>[^/]+)/expenses", financial.PostGroupExpenseHandler)
 	router.AddRoute("GET", "/VassistantBackendProxy/financial/groups/(?P<groupId>[^/]+)/users", financial.GetGroupUsersHandler)
 	router.AddRoute("GET", "/VassistantBackendProxy/financial/expense-split-types", financial.GetExpenseSplitTypeHandler)

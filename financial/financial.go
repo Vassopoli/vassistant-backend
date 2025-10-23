@@ -174,6 +174,130 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 	}, nil
 }
 
+func GetExpenseHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	log.Printf("request: %+v\n", request)
+
+	// Extract groupId and expenseId from path parameters
+	groupId, ok := request.PathParameters["groupId"]
+	if !ok || groupId == "" {
+		return common.CreateErrorResponse(400, "Group ID is missing")
+	}
+	expenseId, ok := request.PathParameters["expenseId"]
+	if !ok || expenseId == "" {
+		return common.CreateErrorResponse(400, "Expense ID is missing")
+	}
+
+	// Build the get item input
+	getItemInput := &dynamodb.GetItemInput{
+		TableName: aws.String("splitter-expenses"),
+		Key: map[string]types.AttributeValue{
+			"expenseId": &types.AttributeValueMemberS{Value: expenseId},
+		},
+	}
+
+	// Make the DynamoDB GetItem API call
+	result, err := DynamoDbClient.GetItem(context.TODO(), getItemInput)
+	if err != nil {
+		log.Printf("Error getting item from DynamoDB: %v", err)
+		return common.CreateErrorResponse(500, "Internal server error")
+	}
+
+	// Check if the item was found
+	if result.Item == nil {
+		return common.CreateErrorResponse(404, "Expense not found")
+	}
+
+	// Unmarshal the Item into a FinancialExpense struct
+	var expense FinancialExpense
+	err = attributevalue.UnmarshalMap(result.Item, &expense)
+	if err != nil {
+		log.Printf("Error unmarshalling expense: %v", err)
+		return common.CreateErrorResponse(500, "Internal server error")
+	}
+
+	// Verify that the retrieved expense belongs to the correct group
+	if expense.GroupID != groupId {
+		return common.CreateErrorResponse(404, "Expense not found in this group")
+	}
+
+	log.Printf("Successfully retrieved expense %s for group %s", expense.ExpenseID, expense.GroupID)
+
+	// Collect all unique user IDs
+	userIds := make(map[string]struct{})
+	userIds[expense.PaidBy] = struct{}{}
+	if expense.CreatedBy != "" {
+		userIds[expense.CreatedBy] = struct{}{}
+	}
+	for _, participant := range expense.Participants {
+		userIds[participant.UserID] = struct{}{}
+	}
+
+	// Prepare keys for BatchGetItem
+	keys := make([]map[string]types.AttributeValue, 0, len(userIds))
+	for userId := range userIds {
+		keys = append(keys, map[string]types.AttributeValue{
+			"userId": &types.AttributeValueMemberS{Value: userId},
+		})
+	}
+
+	// Fetch all user details in a single BatchGetItem call
+	if len(keys) > 0 {
+		batchGetItemInput := &dynamodb.BatchGetItemInput{
+			RequestItems: map[string]types.KeysAndAttributes{
+				"vassistant-users": {
+					Keys: keys,
+				},
+			},
+		}
+
+		userResult, err := DynamoDbClient.BatchGetItem(context.TODO(), batchGetItemInput)
+		if err != nil {
+			log.Printf("Error getting user details from DynamoDB: %v", err)
+			return common.CreateErrorResponse(500, "Internal server error")
+		}
+
+		// Create a map of userId to User for easy lookup
+		userMap := make(map[string]User)
+		userItems := userResult.Responses["vassistant-users"]
+
+		for _, item := range userItems {
+			var user User
+			err = attributevalue.UnmarshalMap(item, &user)
+			if err != nil {
+				log.Printf("Error unmarshalling user: %v", err)
+				return common.CreateErrorResponse(500, "Internal server error")
+			}
+			userMap[user.UserID] = user
+		}
+
+		// Populate the user details in the expense
+		if user, ok := userMap[expense.PaidBy]; ok {
+			expense.PaidByUser = user
+		}
+		if user, ok := userMap[expense.CreatedBy]; ok {
+			expense.CreatedByUser = user
+		}
+		for j, participant := range expense.Participants {
+			if user, ok := userMap[participant.UserID]; ok {
+				expense.Participants[j].User = user
+			}
+		}
+	}
+
+	// Marshal the expense into JSON for the payload
+	payload, err := json.Marshal(expense)
+	if err != nil {
+		log.Println("Error marshalling expense:", err)
+		return common.CreateErrorResponse(500, "Internal server error")
+	}
+
+	return events.APIGatewayProxyResponse{
+		StatusCode: 200,
+		Headers:    map[string]string{"Content-Type": "application/json"},
+		Body:       string(payload),
+	}, nil
+}
+
 func GetExpenseCategoriesHandler(request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	log.Printf("request: %+v\n", request)
 
