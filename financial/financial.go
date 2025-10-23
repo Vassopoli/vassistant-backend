@@ -69,7 +69,7 @@ func GetGroupExpensesHandler(request events.APIGatewayProxyRequest) (events.APIG
 	// Build the query input
 	queryInput := &dynamodb.QueryInput{
 		TableName:              aws.String("splitter-expenses"),
-		IndexName:              aws.String("dateTime-index"),
+		IndexName:              aws.String("groupId-dateTime-index"),
 		KeyConditionExpression: aws.String("groupId = :groupId"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":groupId": &types.AttributeValueMemberS{Value: groupId},
