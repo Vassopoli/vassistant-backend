@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"math/big"
 	"time"
 	"vassistant-backend/common"
 
@@ -17,9 +18,10 @@ import (
 
 // Participant struct for financial expense participants
 type Participant struct {
-	UserID string      `json:"userId" dynamodbav:"userId"`
-	Share  json.Number `json:"share" dynamodbav:"share"`
-	User   `dynamodbav:"-"`
+	UserID          string      `json:"userId" dynamodbav:"userId"`
+	Share           json.Number `json:"share" dynamodbav:"share"`
+	CalculatedMoney json.Number `json:"calculatedMoney" dynamodbav:"calculatedMoney"`
+	User            `dynamodbav:"-"`
 }
 
 // User struct for the vassistant-users table
@@ -517,6 +519,43 @@ func PostGroupExpenseHandler(request events.APIGatewayProxyRequest) (events.APIG
 	expense.GroupID = groupId
 	expense.CreatedBy = sub
 	expense.CreatedAt = time.Now().Format(time.RFC3339)
+
+	// Calculate calculatedMoney for each participant
+	amount, _, err := new(big.Float).Parse(string(expense.Amount), 10)
+	if err != nil {
+		log.Printf("Error parsing amount: %v", err)
+		return common.CreateErrorResponse(400, "Invalid amount")
+	}
+
+	var totalCalculated big.Float
+	for i := range expense.Participants {
+		share, _, err := new(big.Float).Parse(string(expense.Participants[i].Share), 10)
+		if err != nil {
+			log.Printf("Error parsing share: %v", err)
+			return common.CreateErrorResponse(400, "Invalid share")
+		}
+
+		// calculatedMoney = (amount * share) / 100
+		calculatedMoney := new(big.Float).Quo(new(big.Float).Mul(amount, share), big.NewFloat(100))
+		calculatedMoney.SetMode(big.ToNearestEven)
+		calculatedMoney.SetPrec(64)
+		calculatedMoneyStr := calculatedMoney.Text('f', 2)
+
+		// To avoid rounding errors, the last participant gets the remaining amount
+		if i == len(expense.Participants)-1 {
+			remaining := new(big.Float).Sub(amount, &totalCalculated)
+			remainingStr := remaining.Text('f', 2)
+			expense.Participants[i].CalculatedMoney = json.Number(remainingStr)
+		} else {
+			calculated, _, err := new(big.Float).Parse(calculatedMoneyStr, 10)
+			if err != nil {
+				log.Printf("Error parsing calculated money: %v", err)
+				return common.CreateErrorResponse(500, "Internal server error")
+			}
+			totalCalculated.Add(&totalCalculated, calculated)
+			expense.Participants[i].CalculatedMoney = json.Number(calculatedMoneyStr)
+		}
+	}
 
 	// Marshal the expense into a DynamoDB attribute value map
 	av, err := attributevalue.MarshalMap(expense)
