@@ -481,6 +481,9 @@ func GetGroupHandler(request events.APIGatewayProxyRequest) (events.APIGatewayPr
 		return common.CreateErrorResponse(500, "Internal server error")
 	}
 
+	//TODO: For Debug, remove
+	log.Printf("Successfully retrieved and marshalled group %+v", payload)
+
 	return events.APIGatewayProxyResponse{
 		StatusCode: 200,
 		Headers:    map[string]string{"Content-Type": "application/json"},
