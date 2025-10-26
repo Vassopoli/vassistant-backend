@@ -392,10 +392,65 @@ func TestPostGroupExpenseHandler(t *testing.T) {
 	assert.Equal(t, "test-user-id", createdExpense.CreatedBy)
 	assert.NotEmpty(t, createdExpense.CreatedAt)
 	assert.Equal(t, testDateTime, createdExpense.DateTime)
+	assert.Equal(t, "50.00", string(createdExpense.Participants[0].CalculatedMoney))
+	assert.Equal(t, "50.00", string(createdExpense.Participants[1].CalculatedMoney))
 
 	// Check if CreatedAt is a valid timestamp
 	_, err = time.Parse(time.RFC3339, createdExpense.CreatedAt)
 	assert.NoError(t, err)
+}
+
+func TestPostGroupExpenseHandlerWithRounding(t *testing.T) {
+	// Set up the mock DynamoDB client
+	mockClient := &MockDynamoDBClient{
+		PutItemFunc: func(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
+			return &dynamodb.PutItemOutput{}, nil
+		},
+	}
+	DynamoDbClient = mockClient
+
+	// Create a sample request body
+	expense := FinancialExpense{
+		Amount: "100",
+		Participants: []Participant{
+			{UserID: "user-1", Share: "33.33"},
+			{UserID: "user-2", Share: "33.33"},
+			{UserID: "user-3", Share: "33.34"},
+		},
+	}
+	body, err := json.Marshal(expense)
+	assert.NoError(t, err)
+
+	// Create a sample request
+	request := events.APIGatewayProxyRequest{
+		RequestContext: events.APIGatewayProxyRequestContext{
+			Authorizer: map[string]interface{}{
+				"claims": map[string]interface{}{
+					"sub": "test-user-id",
+				},
+			},
+		},
+		PathParameters: map[string]string{
+			"groupId": "test-group-id",
+		},
+		Body: string(body),
+	}
+
+	// Call the handler
+	response, err := PostGroupExpenseHandler(request)
+	assert.NoError(t, err)
+
+	// Check the response
+	assert.Equal(t, http.StatusCreated, response.StatusCode)
+
+	var createdExpense FinancialExpense
+	err = json.Unmarshal([]byte(response.Body), &createdExpense)
+	assert.NoError(t, err)
+
+	// Verify the created expense
+	assert.Equal(t, "33.33", string(createdExpense.Participants[0].CalculatedMoney))
+	assert.Equal(t, "33.33", string(createdExpense.Participants[1].CalculatedMoney))
+	assert.Equal(t, "33.34", string(createdExpense.Participants[2].CalculatedMoney))
 }
 
 func TestGetExpenseCategoriesHandler(t *testing.T) {
